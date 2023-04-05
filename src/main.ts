@@ -8,6 +8,7 @@ async function run(): Promise<void> {
     const token = core.getInput('token', {required: true})
     if (mode === 'check-for-approvals') {
       const approved_sha = await checkForApprovals(token)
+      core.debug(`approved_sha: ${approved_sha}`)
       core.setOutput('approved_sha', approved_sha)
     } else if (mode === 'dismiss-stale-reviews') {
       await dismissIfStale({
