@@ -1,11 +1,16 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'Dismiss reviews if stale'
+description: >
+  An action which will dismiss reviews if they are stale. Notably, this action behaves
+  correctly even if the branch was rebased or force pushed (versus GitHub's built-in
+  dismiss if stale functionality).
+author: 'Krishna Vudata'
 inputs:
-  milliseconds: # change this
+  mode:
     required: true
-    description: 'input description here'
-    default: 'default value if applicable'
+    description: 'Specify either "check-for-approvals" or "dismiss-stale-reviews"'
+  path_to_cached_diff:
+    description: >
+      Path to the cached diff file. Only required for dismiss-stale-reviews mode.
 runs:
   using: 'node16'
   main: 'dist/index.js'
