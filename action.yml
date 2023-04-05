@@ -11,6 +11,13 @@ inputs:
   path_to_cached_diff:
     description: >
       Path to the cached diff file. Only required for dismiss-stale-reviews mode.
+  token:
+    description: 'GitHub token'
+    default: '${{ github.token }}'
+outputs:
+  approved_sha:
+    description: >
+      The SHA of the commit that was approved. Only set in check-for-approvals mode.
 runs:
   using: 'node16'
   main: 'dist/index.js'
