@@ -6,7 +6,7 @@
 import fs from 'fs'
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import {PullRequest} from './pull_request'
+import {PullRequest} from './pull-request'
 
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
@@ -15,7 +15,7 @@ export async function dismissIfStale({
 }: {
   token: string
   path_to_cached_diff: string
-}) {
+}): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
   // was changed (edited event was triggered and the changes field of the event
   // indicates the base being changed).
@@ -44,7 +44,7 @@ export async function dismissIfStale({
   let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
   if (reviewed_diff) {
     reviewed_diff = normalizeDiff(reviewed_diff)
-    core.debug('reviewed_diff: ' + reviewed_diff)
+    core.debug(`reviewed_diff: ${reviewed_diff}`)
   }
 
   // Generate the current diff.
@@ -57,7 +57,7 @@ export async function dismissIfStale({
     pull_request_payload.head.sha
   )
   current_diff = normalizeDiff(current_diff)
-  core.debug('current_diff: ' + current_diff)
+  core.debug(`current_diff: ${current_diff}`)
 
   // If the diffs are different or we weren't able to get the reviewed diff, then the
   // review is (pessimistically) considered stale.
@@ -70,7 +70,7 @@ export async function dismissIfStale({
 async function genReviewedDiff(
   path_to_cached_diff: string,
   pull_request: PullRequest
-) {
+): Promise<string | null> {
   // check if the cached diff exists
   core.debug(`Checking for cached diff at ${path_to_cached_diff}.`)
   if (fs.existsSync(path_to_cached_diff)) {
@@ -80,7 +80,7 @@ async function genReviewedDiff(
   return await pull_request.getMostRecentlyReviewedDiff()
 }
 
-function normalizeDiff(diff: string) {
+function normalizeDiff(diff: string): string {
   // Normalize the diff by dropping the file hash metadata[1]
   // because we are only concerned with the changes in the file contents which the
   // reviewer would have seen.
