@@ -203,6 +203,7 @@ function run() {
             const token = core.getInput('token', { required: true });
             if (mode === 'check-for-approvals') {
                 const approved_sha = yield (0, check_for_approvals_1.checkForApprovals)(token);
+                core.debug(`approved_sha: ${approved_sha}`);
                 core.setOutput('approved_sha', approved_sha);
             }
             else if (mode === 'dismiss-stale-reviews') {
