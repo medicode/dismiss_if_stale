@@ -17,7 +17,8 @@ inputs:
 outputs:
   approved_sha:
     description: >
-      The SHA of the commit that was approved. Only set in check-for-approvals mode.
+      The SHA of the commit that was approved. Only set in check-for-approvals mode, and
+      if there is an approval on the PR.
 runs:
   using: 'node16'
   main: 'dist/index.js'
