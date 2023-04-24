@@ -1,0 +1,71 @@
+# A workflow to dismiss an approved review if the diff has changed.
+# You can use the dismiss-if-diff-changed job as a required status check in a branch
+# protection rule to ensure that a PR is re-reviewed if the diff changes.
+
+name: Dismiss review if stale
+on:  # specify when to trigger the workflow
+  # the events and their specification can be found at
+  # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads
+
+  # watch for edits to the branch or PR to catch code changes (or lack of)
+  pull_request:
+    types:
+    # in the case of a single commit PR which doesn't get edited, this job should run
+    # and be green so it can be used as a required status check
+    - opened
+    # the PR's branch was updated (via push or merge)
+    - synchronize
+    # PR was edited - particularly the base branch may have changed
+    - edited
+    # In practice, we only care about watching for edits and dismissing review on
+    # changes going into the default / production branches.
+    # This should work correctly in the case of Graphite stack merging as well because
+    # Graphite is merging and rebasing PRs iteratively, so the base branch will
+    # eventually be set to a target branch we care about.
+    branches:
+    - master
+    - develop
+    - main
+  # Note that the pull_request event doesn't get triggered if there are merge
+  # conflicts[1].
+  # This is handy for the case of a stack of PRs being rebased and the base branch
+  # for one of the PRs was merged - this naturally creates a merge conflict, and we
+  # don't want to evaluate whether reviews should be dismissed until that merge
+  # conflict has been resolved (so we can then evaluate if there was a change in the
+  # diff which was reviewed.
+  #
+  # [1] https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
+jobs:
+  dismiss-if-diff-changed:
+    # We intentionally don't use job.if to ensure that this job always runs and can be
+    # used as a required status check (skipped jobs are not considered successful)
+    #if: ${{ github.event.action == 'synchronize' || (github.event.action == 'edited' && github.event.changes.base.sha.from != null) }}
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      # give permission to read the contents of the repository to compute the diff
+      contents: read
+      # give permission to dismiss approvals
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v3
+      - id: check
+        uses: ./
+        with:
+          mode: check-for-approvals
+      # Try to restore the approved diff from the cache.
+      # Notably, the cached diff is the only way to reliably know the reviewed diff in
+      # the case of the target branch changing because that branch was merged and
+      # deleted.
+      - uses: actions/cache@v3
+        if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != 'null' }}
+        with:
+          path: approved.diff
+          key: ${{ steps.check.outputs.approved_sha }}
+      - if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != 'null' }}
+        uses: ./
+        with:
+          mode: dismiss-stale-reviews
+          path_to_cached_diff: approved.diff

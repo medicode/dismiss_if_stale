@@ -1,0 +1,35 @@
+# A workflow to cache snapshots of approved diffs.
+# These snapshots are used by dismiss-if-stale-review.
+
+name: Cache approved diff
+on:  # specify when to trigger the workflow
+  # the events and their specification can be found at
+  # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads
+
+  # watch for PR approval to cache a snapshot of the reviewed diff
+  pull_request_review:
+    types: [submitted]
+jobs:
+  # Take a snapshot of the diff when a PR is approved so we can compare against it
+  # later.
+  snapshot-approved-diff:
+    runs-on: ubuntu-latest
+    # run if this is a PR approval
+    if: ${{ github.event.review.state == 'APPROVED' }}
+    permissions:  # permissions to check for approval and get the diff
+      contents: read
+      pull-requests: read
+    steps:
+      # get the diff using gh CLI
+      - run: >
+          gh api -H 'Accept: application/vnd.github.diff'
+          /repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} > approved.diff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Cache the diff. The cache is scoped to the current branch and the "default"
+      # branch aka develop.
+      - uses: actions/cache@v3
+        with:
+          path: approved.diff
+          # we key by the commit corresponding to when the PR was approved
+          key: ${{ github.event.pull_request.head.sha }}
