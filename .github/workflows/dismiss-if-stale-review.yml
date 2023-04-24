@@ -10,6 +10,9 @@ on:  # specify when to trigger the workflow
   # watch for edits to the branch or PR to catch code changes (or lack of)
   pull_request:
     types:
+    # in the case of a single commit PR which doesn't get edited, this job should run
+    # and be green so it can be used as a required status check
+    - opened
     # the PR's branch was updated (via push or merge)
     - synchronize
     # PR was edited - particularly the base branch may have changed
