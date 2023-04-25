@@ -204,7 +204,12 @@ function run() {
             if (mode === 'check-for-approvals') {
                 const approved_sha = yield (0, check_for_approvals_1.checkForApprovals)(token);
                 core.debug(`approved_sha: ${approved_sha}`);
-                core.setOutput('approved_sha', approved_sha);
+                if (approved_sha != null) {
+                    core.setOutput('approved_sha', approved_sha);
+                }
+                else {
+                    core.setOutput('approved_sha', '');
+                }
             }
             else if (mode === 'dismiss-stale-reviews') {
                 yield (0, dismiss_if_stale_1.dismissIfStale)({
