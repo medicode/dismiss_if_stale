@@ -59,7 +59,7 @@ export class PullRequest {
     )
   }
 
-  async dismissApprovals(): Promise<void> {
+  async dismissApprovals(message: string): Promise<void> {
     const approved_reviews = await this.getApprovedReviews()
     const requests = []
     for (const review of approved_reviews) {
@@ -69,7 +69,7 @@ export class PullRequest {
           repo: this.repo,
           pull_number: this.pull_number,
           review_id: review.id,
-          message: 'Code has been changed, dismissing stale review.'
+          message
         })
       )
     }

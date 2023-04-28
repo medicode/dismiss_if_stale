@@ -108,10 +108,14 @@ function dismissIfStale({ token, path_to_cached_diff }) {
             return;
         }
         const pull_request = new pull_request_1.PullRequest(token);
+        const diffs_dir = core.getInput('diffs_directory');
         let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
         if (reviewed_diff) {
             reviewed_diff = normalizeDiff(reviewed_diff);
-            core.debug(`reviewed_diff: ${reviewed_diff}`);
+            core.debug(`reviewed_diff:\n${reviewed_diff}`);
+            if (diffs_dir) {
+                fs_1.default.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff);
+            }
         }
         // Generate the current diff.
         const pull_request_payload = github.context.payload.pull_request;
@@ -120,12 +124,24 @@ function dismissIfStale({ token, path_to_cached_diff }) {
         }
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
-        core.debug(`current_diff: ${current_diff}`);
+        core.debug(`current_diff:\n${current_diff}`);
+        if (diffs_dir) {
+            fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
+        }
         // If the diffs are different or we weren't able to get the reviewed diff, then the
         // review is (pessimistically) considered stale.
         if (reviewed_diff !== current_diff) {
-            core.notice('Code has changed, dismissing stale reviews.');
-            yield pull_request.dismissApprovals();
+            let msg;
+            if (!reviewed_diff) {
+                msg =
+                    'Unable to get the most recently reviewed diff. ' +
+                        'Pessimistically dismissing stale reviews.';
+            }
+            else {
+                msg = 'Code has changed, dismissing stale reviews.';
+            }
+            core.notice(msg);
+            yield pull_request.dismissApprovals(msg);
         }
     });
 }
@@ -309,7 +325,7 @@ class PullRequest {
             return reviews.filter((review) => review.state === 'APPROVED');
         });
     }
-    dismissApprovals() {
+    dismissApprovals(message) {
         return __awaiter(this, void 0, void 0, function* () {
             const approved_reviews = yield this.getApprovedReviews();
             const requests = [];
@@ -319,7 +335,7 @@ class PullRequest {
                     repo: this.repo,
                     pull_number: this.pull_number,
                     review_id: review.id,
-                    message: 'Code has been changed, dismissing stale review.'
+                    message
                 }));
             }
             yield Promise.all(requests);

@@ -14,6 +14,10 @@ inputs:
   token:
     description: 'GitHub token'
     default: '${{ github.token }}'
+  diffs_directory:
+    description: >
+      Optional directory to store diffs - useful for debugging what changes led to
+      approval dismissals. Only relevant in dismiss-stale-reviews mode.
 outputs:
   approved_sha:
     description: >
