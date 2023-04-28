@@ -40,11 +40,15 @@ export async function dismissIfStale({
   }
 
   const pull_request = new PullRequest(token)
+  const diffs_dir = core.getInput('diffs_directory')
 
   let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
   if (reviewed_diff) {
     reviewed_diff = normalizeDiff(reviewed_diff)
-    core.debug(`reviewed_diff: ${reviewed_diff}`)
+    core.debug(`reviewed_diff:\n${reviewed_diff}`)
+    if (diffs_dir) {
+      fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
+    }
   }
 
   // Generate the current diff.
@@ -57,13 +61,24 @@ export async function dismissIfStale({
     pull_request_payload.head.sha
   )
   current_diff = normalizeDiff(current_diff)
-  core.debug(`current_diff: ${current_diff}`)
+  core.debug(`current_diff:\n${current_diff}`)
+  if (diffs_dir) {
+    fs.writeFileSync(`${diffs_dir}/current.diff`, current_diff)
+  }
 
   // If the diffs are different or we weren't able to get the reviewed diff, then the
   // review is (pessimistically) considered stale.
   if (reviewed_diff !== current_diff) {
-    core.notice('Code has changed, dismissing stale reviews.')
-    await pull_request.dismissApprovals()
+    let msg
+    if (!reviewed_diff) {
+      msg =
+        'Unable to get the most recently reviewed diff. ' +
+        'Pessimistically dismissing stale reviews.'
+    } else {
+      msg = 'Code has changed, dismissing stale reviews.'
+    }
+    core.notice(msg)
+    await pull_request.dismissApprovals(msg)
   }
 }
 
