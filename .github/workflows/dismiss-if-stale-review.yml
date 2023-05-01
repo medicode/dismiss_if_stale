@@ -51,6 +51,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - run: pwd && ls -l
       - id: check
         uses: ./
         with:
@@ -69,3 +70,5 @@ jobs:
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
+          repo_path: 'dismiss_if_stale2'
+
