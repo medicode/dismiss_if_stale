@@ -18,6 +18,12 @@ inputs:
     description: >
       Optional directory to store diffs - useful for debugging what changes led to
       approval dismissals. Only relevant in dismiss-stale-reviews mode.
+  repo_path:
+    description: >
+      Path to the repo for the pull request - if the repo is not already checked out to
+      this path, then it will be. There are some cases where we need to compute the diff
+      using git and the repo directly.
+      Only relevant in dismiss-stale-reviews mode.
 outputs:
   approved_sha:
     description: >

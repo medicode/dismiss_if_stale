@@ -19,7 +19,8 @@ async function run(): Promise<void> {
         token,
         path_to_cached_diff: core.getInput('path_to_cached_diff', {
           required: true
-        })
+        }),
+        repo_path: core.getInput('repo_path', {required: true})
       })
     }
   } catch (error) {

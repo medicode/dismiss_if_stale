@@ -86,8 +86,9 @@ const fs_1 = __importDefault(__nccwpck_require__(7147));
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const pull_request_1 = __nccwpck_require__(1843);
+const child_process_1 = __nccwpck_require__(2081);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff }) {
+function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -119,9 +120,10 @@ function dismissIfStale({ token, path_to_cached_diff }) {
         }
         // Generate the current diff.
         const pull_request_payload = github.context.payload.pull_request;
-        if (!pull_request_payload) {
+        if (!pull_request_payload || !github.context.payload.repository) {
             throw new Error('This action must be run on a pull request.');
         }
+        core.info(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
         core.debug(`current_diff:\n${current_diff}`);
@@ -166,6 +168,31 @@ function normalizeDiff(diff) {
     //     Basically, these are the "index <sha1>..<sha2>" lines in the diff output.
     //     Note that these lines may be terminated by an optional " <mode>" suffix.
     return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '');
+}
+function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
+    // GitHub API doesn't support generating two-dot diffs (diffs between files in two
+    // commits), so we do it ourselves by
+    // 1. clone the repo if needed
+    // 2. fetch the base and head commits
+    // 3. generate the diff using git diff
+    // clone the repo if needed
+    const repo_url = repository.clone_url;
+    if (!fs_1.default.existsSync(repo_path)) {
+        core.debug(`Cloning ${repository.full_name} to ${repo_path}.`);
+        fs_1.default.mkdirSync(repo_path, { recursive: true });
+        (0, child_process_1.execSync)(`git clone --depth=1 ${repo_url} ${repo_path}`);
+    }
+    // fetch the base and head commits
+    core.debug(`Fetching ${base_sha} and ${head_sha}.`);
+    const cwd = process.cwd();
+    process.chdir(repo_path);
+    (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
+        cwd: repo_path
+    });
+    process.chdir(cwd);
+    // generate the diff
+    core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
+    return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`).toString();
 }
 
 
@@ -232,7 +259,8 @@ function run() {
                     token,
                     path_to_cached_diff: core.getInput('path_to_cached_diff', {
                         required: true
-                    })
+                    }),
+                    repo_path: core.getInput('repo_path', { required: true })
                 });
             }
         }
@@ -10060,6 +10088,14 @@ module.exports = eval("require")("encoding");
 
 "use strict";
 module.exports = require("assert");
+
+/***/ }),
+
+/***/ 2081:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("child_process");
 
 /***/ }),
 
