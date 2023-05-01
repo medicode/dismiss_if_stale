@@ -61,12 +61,12 @@ jobs:
       # the case of the target branch changing because that branch was merged and
       # deleted.
       - uses: actions/cache@v3
-        if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
+        # if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
           path: approved.diff
           key: ${{ steps.check.outputs.approved_sha }}
-      - if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
-        uses: ./
+      - uses: ./
+        # if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
