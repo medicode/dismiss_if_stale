@@ -12,7 +12,9 @@ inputs:
     description: >
       Path to the cached diff file. Only required for dismiss-stale-reviews mode.
   token:
-    description: 'GitHub token'
+    description: >
+      GitHub token - at a minimum, this must have
+      'contents: read' and 'pull-requests: write' permissions.
     default: '${{ github.token }}'
   diffs_directory:
     description: >

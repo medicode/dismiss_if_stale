@@ -94,12 +94,13 @@ export async function dismissIfStale({
       )
     }
     current_diff = normalizeDiff(
-      genTwoDotDiff(
-        github.context.payload.repository,
+      genTwoDotDiff({
+        repository: github.context.payload.repository,
+        token,
         repo_path,
-        pull_request_payload.base.sha,
-        pull_request_payload.head.sha
-      )
+        base_sha: pull_request_payload.base.sha,
+        head_sha: pull_request_payload.head.sha,
+      })
     )
     core.debug(`current two dot diff:\n${current_diff}`)
   }
@@ -147,12 +148,19 @@ function normalizeDiff(diff: string): string {
   return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '')
 }
 
-function genTwoDotDiff(
-  repository: PayloadRepository,
-  repo_path: string,
-  base_sha: string,
+function genTwoDotDiff({
+  repository,
+  token,
+  repo_path,
+  base_sha,
+  head_sha,
+}: {
+  repository: PayloadRepository
+  token: string
+  repo_path: string
+  base_sha: string
   head_sha: string
-): string {
+}): string {
   // GitHub API doesn't support generating two-dot diffs (diffs between files in two
   // commits), so we do it ourselves by
   // 1. clone the repo if needed
@@ -160,22 +168,41 @@ function genTwoDotDiff(
   // 3. generate the diff using git diff
 
   // clone the repo if needed
-  const repo_url = repository.clone_url
+  let env = process.env
   if (!fs.existsSync(repo_path)) {
     core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
     fs.mkdirSync(repo_path, {recursive: true})
-    execSync(`git clone --depth=1 ${repo_url} ${repo_path}`)
+    // Use gh versus git clone - makes authentication via token easier.
+    // Note that the env here is propagated to subsequent git commands - this is
+    // needed for gh to use the token.
+    env = {
+      ...env,
+      GITHUB_TOKEN: token,
+    }
+    execSync(
+      `gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`,
+      {
+        env,
+      }
+    )
+    core.debug('Configuring git to use gh as a credential helper.')
+    execSync('gh auth setup-git', {
+      env,
+      cwd: repo_path,
+    })
   }
 
   // fetch the base and head commits
   core.debug(`Fetching ${base_sha} and ${head_sha}.`)
   execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
+    env,
     cwd: repo_path,
   })
 
   // generate the diff
   core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
   return execSync(`git diff ${base_sha} ${head_sha}`, {
+    env,
     cwd: repo_path,
   }).toString()
 }
