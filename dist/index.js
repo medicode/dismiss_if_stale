@@ -150,7 +150,13 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
                 throw new Error('This action must be run on a pull request with repository made available in ' +
                     'the payload.');
             }
-            current_diff = normalizeDiff(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
+            current_diff = normalizeDiff(genTwoDotDiff({
+                repository: github.context.payload.repository,
+                token,
+                repo_path,
+                base_sha: pull_request_payload.base.sha,
+                head_sha: pull_request_payload.head.sha,
+            }));
             core.debug(`current two dot diff:\n${current_diff}`);
         }
         if (diffs_dir) {
@@ -195,27 +201,40 @@ function normalizeDiff(diff) {
     //     Note that these lines may be terminated by an optional " <mode>" suffix.
     return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '');
 }
-function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
+function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
     // GitHub API doesn't support generating two-dot diffs (diffs between files in two
     // commits), so we do it ourselves by
     // 1. clone the repo if needed
     // 2. fetch the base and head commits
     // 3. generate the diff using git diff
     // clone the repo if needed
-    const repo_url = repository.clone_url;
+    let env = process.env;
     if (!fs_1.default.existsSync(repo_path)) {
         core.debug(`Cloning ${repository.full_name} to ${repo_path}.`);
         fs_1.default.mkdirSync(repo_path, { recursive: true });
-        (0, child_process_1.execSync)(`git clone --depth=1 ${repo_url} ${repo_path}`);
+        // Use gh versus git clone - makes authentication via token easier.
+        // Note that the env here is propagated to subsequent git commands - this is
+        // needed for gh to use the token.
+        env = Object.assign(Object.assign({}, env), { GITHUB_TOKEN: token });
+        (0, child_process_1.execSync)(`gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`, {
+            env,
+        });
+        core.debug('Configuring git to use gh as a credential helper.');
+        (0, child_process_1.execSync)('gh auth setup-git', {
+            env,
+            cwd: repo_path,
+        });
     }
     // fetch the base and head commits
     core.debug(`Fetching ${base_sha} and ${head_sha}.`);
     (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
+        env,
         cwd: repo_path,
     });
     // generate the diff
     core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
     return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
+        env,
         cwd: repo_path,
     }).toString();
 }
