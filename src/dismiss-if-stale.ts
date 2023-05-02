@@ -14,7 +14,7 @@ import {execSync} from 'child_process'
 export async function dismissIfStale({
   token,
   path_to_cached_diff,
-  repo_path
+  repo_path,
 }: {
   token: string
   path_to_cached_diff: string
@@ -170,12 +170,12 @@ function genTwoDotDiff(
   // fetch the base and head commits
   core.debug(`Fetching ${base_sha} and ${head_sha}.`)
   execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
-    cwd: repo_path
+    cwd: repo_path,
   })
 
   // generate the diff
   core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
   return execSync(`git diff ${base_sha} ${head_sha}`, {
-    cwd: repo_path
+    cwd: repo_path,
   }).toString()
 }

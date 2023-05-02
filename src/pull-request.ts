@@ -50,7 +50,7 @@ export class PullRequest {
       {
         owner: this.owner,
         repo: this.repo,
-        pull_number: this.pull_number
+        pull_number: this.pull_number,
       }
     )
 
@@ -69,7 +69,7 @@ export class PullRequest {
           repo: this.repo,
           pull_number: this.pull_number,
           review_id: review.id,
-          message
+          message,
         })
       )
     }
@@ -83,7 +83,7 @@ export class PullRequest {
       {
         owner: this.owner,
         repo: this.repo,
-        issue_number: this.pull_number
+        issue_number: this.pull_number,
       }
     )
     return events
@@ -95,8 +95,8 @@ export class PullRequest {
       repo: this.repo,
       basehead: `${base}...${head}`,
       headers: {
-        Accept: 'application/vnd.github.diff'
-      }
+        Accept: 'application/vnd.github.diff',
+      },
     })
     if (response.status !== 200) {
       throw new Error(`Got status ${response.status} from GitHub API.`)

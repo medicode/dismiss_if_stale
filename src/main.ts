@@ -18,9 +18,9 @@ async function run(): Promise<void> {
       await dismissIfStale({
         token,
         path_to_cached_diff: core.getInput('path_to_cached_diff', {
-          required: true
+          required: true,
         }),
-        repo_path: core.getInput('repo_path', {required: true})
+        repo_path: core.getInput('repo_path', {required: true}),
       })
     }
   } catch (error) {
