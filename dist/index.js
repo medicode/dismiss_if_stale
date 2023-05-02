@@ -120,7 +120,7 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
         }
         // Generate the current diff.
         const pull_request_payload = github.context.payload.pull_request;
-        if (!pull_request_payload || !github.context.payload.repository) {
+        if (!pull_request_payload) {
             throw new Error('This action must be run on a pull request.');
         }
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
@@ -146,6 +146,10 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
             // we compute the two dot diff here, then the review will be considered stale even
             // though the code changes on branch2 are still the same - this is an accepted
             // limitation.
+            if (!github.context.payload.repository) {
+                throw new Error('This action must be run on a pull request with repository made available in ' +
+                    'the payload.');
+            }
             current_diff = normalizeDiff(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
             core.debug(`current two dot diff:\n${current_diff}`);
         }
@@ -206,7 +210,6 @@ function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
     }
     // fetch the base and head commits
     core.debug(`Fetching ${base_sha} and ${head_sha}.`);
-    core.debug((0, child_process_1.execSync)('pwd && ls -l', { cwd: repo_path }).toString());
     (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
         cwd: repo_path
     });

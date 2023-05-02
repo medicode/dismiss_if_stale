@@ -57,7 +57,7 @@ export async function dismissIfStale({
 
   // Generate the current diff.
   const pull_request_payload = github.context.payload.pull_request
-  if (!pull_request_payload || !github.context.payload.repository) {
+  if (!pull_request_payload) {
     throw new Error('This action must be run on a pull request.')
   }
   let current_diff = await pull_request.compareCommits(
@@ -87,6 +87,12 @@ export async function dismissIfStale({
     // we compute the two dot diff here, then the review will be considered stale even
     // though the code changes on branch2 are still the same - this is an accepted
     // limitation.
+    if (!github.context.payload.repository) {
+      throw new Error(
+        'This action must be run on a pull request with repository made available in ' +
+          'the payload.'
+      )
+    }
     current_diff = normalizeDiff(
       genTwoDotDiff(
         github.context.payload.repository,
@@ -163,7 +169,6 @@ function genTwoDotDiff(
 
   // fetch the base and head commits
   core.debug(`Fetching ${base_sha} and ${head_sha}.`)
-  core.debug(execSync('pwd && ls -l', {cwd: repo_path}).toString())
   execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
     cwd: repo_path
   })
