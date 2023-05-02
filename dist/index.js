@@ -118,13 +118,17 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
         //     fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
         //   }
         // }
-        const reviewed_diff = null;
+        core.debug(`path_to_cached_diff = ${path_to_cached_diff}`);
+        let reviewed_diff = null;
         // Generate the current diff.
         const pull_request_payload = github.context.payload.pull_request;
+        // start hackery
         if (!pull_request_payload || !github.context.payload.repository) {
             throw new Error('This action must be run on a pull request.');
         }
         core.info(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
+        reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
+        // end hackery
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
         core.debug(`current_diff:\n${current_diff}`);
@@ -185,15 +189,15 @@ function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
     }
     // fetch the base and head commits
     core.debug(`Fetching ${base_sha} and ${head_sha}.`);
-    const cwd = process.cwd();
-    process.chdir(repo_path);
+    core.debug((0, child_process_1.execSync)('pwd && ls -l', { cwd: repo_path }).toString());
     (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
         cwd: repo_path
     });
-    process.chdir(cwd);
     // generate the diff
     core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
-    return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`).toString();
+    return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
+        cwd: repo_path
+    }).toString();
 }
 
 

@@ -54,10 +54,12 @@ export async function dismissIfStale({
   //     fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
   //   }
   // }
-  const reviewed_diff = null
+  core.debug(`path_to_cached_diff = ${path_to_cached_diff}`)
+  let reviewed_diff = null
 
   // Generate the current diff.
   const pull_request_payload = github.context.payload.pull_request
+  // start hackery
   if (!pull_request_payload || !github.context.payload.repository) {
     throw new Error('This action must be run on a pull request.')
   }
@@ -69,6 +71,8 @@ export async function dismissIfStale({
       pull_request_payload.head.sha
     )
   )
+  reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
+  // end hackery
   let current_diff = await pull_request.compareCommits(
     pull_request_payload.base.sha,
     pull_request_payload.head.sha
