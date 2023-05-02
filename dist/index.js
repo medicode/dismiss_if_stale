@@ -110,28 +110,45 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
         }
         const pull_request = new pull_request_1.PullRequest(token);
         const diffs_dir = core.getInput('diffs_directory');
-        // let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
-        // if (reviewed_diff) {
-        //   reviewed_diff = normalizeDiff(reviewed_diff)
-        //   core.debug(`reviewed_diff:\n${reviewed_diff}`)
-        //   if (diffs_dir) {
-        //     fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
-        //   }
-        // }
-        core.debug(`path_to_cached_diff = ${path_to_cached_diff}`);
-        let reviewed_diff = null;
+        let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
+        if (reviewed_diff) {
+            reviewed_diff = normalizeDiff(reviewed_diff);
+            core.debug(`reviewed_diff:\n${reviewed_diff}`);
+            if (diffs_dir) {
+                fs_1.default.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff);
+            }
+        }
         // Generate the current diff.
         const pull_request_payload = github.context.payload.pull_request;
-        // start hackery
         if (!pull_request_payload || !github.context.payload.repository) {
             throw new Error('This action must be run on a pull request.');
         }
-        core.info(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
-        reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
-        // end hackery
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
-        core.debug(`current_diff:\n${current_diff}`);
+        core.debug(`current three dot diff:\n${current_diff}`);
+        if (reviewed_diff && reviewed_diff !== current_diff) {
+            // Consider the case of
+            //
+            //   main -> branch1 -> branch2
+            //
+            // where branch2 is the PR branch and branch1 is the base branch.
+            //
+            // If branch1 was just merged into main and branch2 can be cleanly merged into main,
+            // then the three dot diff computed by GitHub (the diff with respect to the common
+            // ancestor of main and branch2) will show the changes from branch2 and branch1.
+            // The changes themselves haven't actually changed, this is just an artifact of the
+            // type of diff being computed.
+            // We instead want to compute a two dot diff (the straight diff between the files in
+            // the repository at these two commits) - in this case if the only changes on main
+            // are the recently merged in changes from branch1, then this will result in a diff
+            // showing only the changes from branch2.
+            // Technically, if there are additional changes landed into the base branch before
+            // we compute the two dot diff here, then the review will be considered stale even
+            // though the code changes on branch2 are still the same - this is an accepted
+            // limitation.
+            current_diff = normalizeDiff(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
+            core.debug(`current two dot diff:\n${current_diff}`);
+        }
         if (diffs_dir) {
             fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
         }

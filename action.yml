@@ -24,6 +24,7 @@ inputs:
       this path, then it will be. There are some cases where we need to compute the diff
       using git and the repo directly.
       Only relevant in dismiss-stale-reviews mode.
+    default: '${{ github.workspace }}'
 outputs:
   approved_sha:
     description: >
