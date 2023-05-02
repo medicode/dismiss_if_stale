@@ -69,5 +69,5 @@ jobs:
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
-          repo_path: '${GITHUB_WORKSPACE}/dismiss_if_stale2'
+          repo_path: /home/runner/work/dismiss_if_stale/dismiss_if_stale2
 
