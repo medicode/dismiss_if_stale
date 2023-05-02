@@ -86,8 +86,9 @@ const fs_1 = __importDefault(__nccwpck_require__(7147));
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const pull_request_1 = __nccwpck_require__(1843);
+const child_process_1 = __nccwpck_require__(2081);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff }) {
+function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -124,7 +125,34 @@ function dismissIfStale({ token, path_to_cached_diff }) {
         }
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
-        core.debug(`current_diff:\n${current_diff}`);
+        core.debug(`current three dot diff:\n${current_diff}`);
+        if (reviewed_diff && reviewed_diff !== current_diff) {
+            // Consider the case of
+            //
+            //   main -> branch1 -> branch2
+            //
+            // where branch2 is the PR branch and branch1 is the base branch.
+            //
+            // If branch1 was just merged into main and branch2 can be cleanly merged into main,
+            // then the three dot diff computed by GitHub (the diff with respect to the common
+            // ancestor of main and branch2) will show the changes from branch2 and branch1.
+            // The changes themselves haven't actually changed, this is just an artifact of the
+            // type of diff being computed.
+            // We instead want to compute a two dot diff (the straight diff between the files in
+            // the repository at these two commits) - in this case if the only changes on main
+            // are the recently merged in changes from branch1, then this will result in a diff
+            // showing only the changes from branch2.
+            // Technically, if there are additional changes landed into the base branch before
+            // we compute the two dot diff here, then the review will be considered stale even
+            // though the code changes on branch2 are still the same - this is an accepted
+            // limitation.
+            if (!github.context.payload.repository) {
+                throw new Error('This action must be run on a pull request with repository made available in ' +
+                    'the payload.');
+            }
+            current_diff = normalizeDiff(genTwoDotDiff(github.context.payload.repository, repo_path, pull_request_payload.base.sha, pull_request_payload.head.sha));
+            core.debug(`current two dot diff:\n${current_diff}`);
+        }
         if (diffs_dir) {
             fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
         }
@@ -166,6 +194,30 @@ function normalizeDiff(diff) {
     //     Basically, these are the "index <sha1>..<sha2>" lines in the diff output.
     //     Note that these lines may be terminated by an optional " <mode>" suffix.
     return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '');
+}
+function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
+    // GitHub API doesn't support generating two-dot diffs (diffs between files in two
+    // commits), so we do it ourselves by
+    // 1. clone the repo if needed
+    // 2. fetch the base and head commits
+    // 3. generate the diff using git diff
+    // clone the repo if needed
+    const repo_url = repository.clone_url;
+    if (!fs_1.default.existsSync(repo_path)) {
+        core.debug(`Cloning ${repository.full_name} to ${repo_path}.`);
+        fs_1.default.mkdirSync(repo_path, { recursive: true });
+        (0, child_process_1.execSync)(`git clone --depth=1 ${repo_url} ${repo_path}`);
+    }
+    // fetch the base and head commits
+    core.debug(`Fetching ${base_sha} and ${head_sha}.`);
+    (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
+        cwd: repo_path
+    });
+    // generate the diff
+    core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
+    return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
+        cwd: repo_path
+    }).toString();
 }
 
 
@@ -232,7 +284,8 @@ function run() {
                     token,
                     path_to_cached_diff: core.getInput('path_to_cached_diff', {
                         required: true
-                    })
+                    }),
+                    repo_path: core.getInput('repo_path', { required: true })
                 });
             }
         }
@@ -10060,6 +10113,14 @@ module.exports = eval("require")("encoding");
 
 "use strict";
 module.exports = require("assert");
+
+/***/ }),
+
+/***/ 2081:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("child_process");
 
 /***/ }),
 

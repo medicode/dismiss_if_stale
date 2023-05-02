@@ -6,15 +6,19 @@
 import fs from 'fs'
 import * as core from '@actions/core'
 import * as github from '@actions/github'
+import {PayloadRepository} from '@actions/github/lib/interfaces'
 import {PullRequest} from './pull-request'
+import {execSync} from 'child_process'
 
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
   token,
-  path_to_cached_diff
+  path_to_cached_diff,
+  repo_path
 }: {
   token: string
   path_to_cached_diff: string
+  repo_path: string
 }): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
   // was changed (edited event was triggered and the changes field of the event
@@ -61,7 +65,44 @@ export async function dismissIfStale({
     pull_request_payload.head.sha
   )
   current_diff = normalizeDiff(current_diff)
-  core.debug(`current_diff:\n${current_diff}`)
+  core.debug(`current three dot diff:\n${current_diff}`)
+
+  if (reviewed_diff && reviewed_diff !== current_diff) {
+    // Consider the case of
+    //
+    //   main -> branch1 -> branch2
+    //
+    // where branch2 is the PR branch and branch1 is the base branch.
+    //
+    // If branch1 was just merged into main and branch2 can be cleanly merged into main,
+    // then the three dot diff computed by GitHub (the diff with respect to the common
+    // ancestor of main and branch2) will show the changes from branch2 and branch1.
+    // The changes themselves haven't actually changed, this is just an artifact of the
+    // type of diff being computed.
+    // We instead want to compute a two dot diff (the straight diff between the files in
+    // the repository at these two commits) - in this case if the only changes on main
+    // are the recently merged in changes from branch1, then this will result in a diff
+    // showing only the changes from branch2.
+    // Technically, if there are additional changes landed into the base branch before
+    // we compute the two dot diff here, then the review will be considered stale even
+    // though the code changes on branch2 are still the same - this is an accepted
+    // limitation.
+    if (!github.context.payload.repository) {
+      throw new Error(
+        'This action must be run on a pull request with repository made available in ' +
+          'the payload.'
+      )
+    }
+    current_diff = normalizeDiff(
+      genTwoDotDiff(
+        github.context.payload.repository,
+        repo_path,
+        pull_request_payload.base.sha,
+        pull_request_payload.head.sha
+      )
+    )
+    core.debug(`current two dot diff:\n${current_diff}`)
+  }
   if (diffs_dir) {
     fs.writeFileSync(`${diffs_dir}/current.diff`, current_diff)
   }
@@ -104,4 +145,37 @@ function normalizeDiff(diff: string): string {
   //     Basically, these are the "index <sha1>..<sha2>" lines in the diff output.
   //     Note that these lines may be terminated by an optional " <mode>" suffix.
   return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '')
+}
+
+function genTwoDotDiff(
+  repository: PayloadRepository,
+  repo_path: string,
+  base_sha: string,
+  head_sha: string
+): string {
+  // GitHub API doesn't support generating two-dot diffs (diffs between files in two
+  // commits), so we do it ourselves by
+  // 1. clone the repo if needed
+  // 2. fetch the base and head commits
+  // 3. generate the diff using git diff
+
+  // clone the repo if needed
+  const repo_url = repository.clone_url
+  if (!fs.existsSync(repo_path)) {
+    core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
+    fs.mkdirSync(repo_path, {recursive: true})
+    execSync(`git clone --depth=1 ${repo_url} ${repo_path}`)
+  }
+
+  // fetch the base and head commits
+  core.debug(`Fetching ${base_sha} and ${head_sha}.`)
+  execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
+    cwd: repo_path
+  })
+
+  // generate the diff
+  core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
+  return execSync(`git diff ${base_sha} ${head_sha}`, {
+    cwd: repo_path
+  }).toString()
 }

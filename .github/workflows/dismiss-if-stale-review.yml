@@ -64,8 +64,8 @@ jobs:
         with:
           path: approved.diff
           key: ${{ steps.check.outputs.approved_sha }}
-      - if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
-        uses: ./
+      - uses: ./
+        if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
