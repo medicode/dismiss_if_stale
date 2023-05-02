@@ -9,6 +9,29 @@ require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 // A script to check if there are any approvals on a PR.
 // Outputs the SHA of the commit for the most recent approval, or 'null' if there are
 // no approvals.
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -21,8 +44,28 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.checkForApprovals = void 0;
 const pull_request_1 = __nccwpck_require__(1843);
+const core = __importStar(__nccwpck_require__(2186));
+const github = __importStar(__nccwpck_require__(5438));
+const dismiss_if_stale_1 = __nccwpck_require__(7902);
 function checkForApprovals(token) {
+    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        // start hacky test for gh repo clone
+        const repo_path = core.getInput('repo_path', { required: true });
+        if (!github.context.payload.repository) {
+            throw new Error('This action must be run on a pull request with repository made available in ' +
+                'the payload.');
+        }
+        const repository = github.context.payload.repository;
+        const diff = (0, dismiss_if_stale_1.genTwoDotDiff)({
+            repository,
+            token,
+            repo_path,
+            base_sha: (_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.base.sha,
+            head_sha: (_b = github.context.payload.pull_request) === null || _b === void 0 ? void 0 : _b.head.sha,
+        });
+        core.info(`diff:\n${diff}`);
+        // end hacky test
         const reviews = new pull_request_1.PullRequest(token);
         const approved_reviews = yield reviews.getApprovedReviews();
         if (approved_reviews.length === 0) {
@@ -81,7 +124,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.dismissIfStale = void 0;
+exports.genTwoDotDiff = exports.dismissIfStale = void 0;
 const fs_1 = __importDefault(__nccwpck_require__(7147));
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
@@ -238,6 +281,7 @@ function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
         cwd: repo_path,
     }).toString();
 }
+exports.genTwoDotDiff = genTwoDotDiff;
 
 
 /***/ }),

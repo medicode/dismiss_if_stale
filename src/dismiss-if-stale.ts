@@ -148,7 +148,7 @@ function normalizeDiff(diff: string): string {
   return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '')
 }
 
-function genTwoDotDiff({
+export function genTwoDotDiff({
   repository,
   token,
   repo_path,
