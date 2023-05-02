@@ -136,6 +136,8 @@ function genTwoDotDiff(
   if (!fs.existsSync(repo_path)) {
     core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
     fs.mkdirSync(repo_path, {recursive: true})
+    // list the files in the current directory
+    core.info(execSync('pwd && ls -l').toString())
     execSync(`git clone --depth=1 ${repo_url} ${repo_path}`)
   }
 
