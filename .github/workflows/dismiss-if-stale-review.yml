@@ -69,7 +69,3 @@ jobs:
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
-          # the checkout action above defaults to cloning the repository to here, refer
-          # to the default value for the `path` input
-          repo_path: ${{ github.workspace }}
-
