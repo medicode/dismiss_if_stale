@@ -88,7 +88,7 @@ const github = __importStar(__nccwpck_require__(5438));
 const pull_request_1 = __nccwpck_require__(1843);
 const child_process_1 = __nccwpck_require__(2081);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff, repo_path }) {
+function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -211,12 +211,12 @@ function genTwoDotDiff(repository, repo_path, base_sha, head_sha) {
     // fetch the base and head commits
     core.debug(`Fetching ${base_sha} and ${head_sha}.`);
     (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
-        cwd: repo_path
+        cwd: repo_path,
     });
     // generate the diff
     core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
     return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
-        cwd: repo_path
+        cwd: repo_path,
     }).toString();
 }
 
@@ -283,9 +283,9 @@ function run() {
                 yield (0, dismiss_if_stale_1.dismissIfStale)({
                     token,
                     path_to_cached_diff: core.getInput('path_to_cached_diff', {
-                        required: true
+                        required: true,
                     }),
-                    repo_path: core.getInput('repo_path', { required: true })
+                    repo_path: core.getInput('repo_path', { required: true }),
                 });
             }
         }
@@ -373,7 +373,7 @@ class PullRequest {
             const reviews = yield this.octokit.paginate(this.octokit.rest.pulls.listReviews, {
                 owner: this.owner,
                 repo: this.repo,
-                pull_number: this.pull_number
+                pull_number: this.pull_number,
             });
             return reviews.filter((review) => review.state === 'APPROVED');
         });
@@ -388,7 +388,7 @@ class PullRequest {
                     repo: this.repo,
                     pull_number: this.pull_number,
                     review_id: review.id,
-                    message
+                    message,
                 }));
             }
             yield Promise.all(requests);
@@ -400,7 +400,7 @@ class PullRequest {
             const events = yield this.octokit.paginate(this.octokit.rest.issues.listEvents, {
                 owner: this.owner,
                 repo: this.repo,
-                issue_number: this.pull_number
+                issue_number: this.pull_number,
             });
             return events;
         });
@@ -412,8 +412,8 @@ class PullRequest {
                 repo: this.repo,
                 basehead: `${base}...${head}`,
                 headers: {
-                    Accept: 'application/vnd.github.diff'
-                }
+                    Accept: 'application/vnd.github.diff',
+                },
             });
             if (response.status !== 200) {
                 throw new Error(`Got status ${response.status} from GitHub API.`);
