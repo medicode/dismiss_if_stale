@@ -46,14 +46,15 @@ export async function dismissIfStale({
   const pull_request = new PullRequest(token)
   const diffs_dir = core.getInput('diffs_directory')
 
-  let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
-  if (reviewed_diff) {
-    reviewed_diff = normalizeDiff(reviewed_diff)
-    core.debug(`reviewed_diff:\n${reviewed_diff}`)
-    if (diffs_dir) {
-      fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
-    }
-  }
+  // let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
+  // if (reviewed_diff) {
+  //   reviewed_diff = normalizeDiff(reviewed_diff)
+  //   core.debug(`reviewed_diff:\n${reviewed_diff}`)
+  //   if (diffs_dir) {
+  //     fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
+  //   }
+  // }
+  const reviewed_diff = null
 
   // Generate the current diff.
   const pull_request_payload = github.context.payload.pull_request
