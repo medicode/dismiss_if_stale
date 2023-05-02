@@ -141,14 +141,13 @@ function genTwoDotDiff(
 
   // fetch the base and head commits
   core.debug(`Fetching ${base_sha} and ${head_sha}.`)
-  const cwd = process.cwd()
-  process.chdir(repo_path)
   execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
     cwd: repo_path
   })
-  process.chdir(cwd)
 
   // generate the diff
   core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
-  return execSync(`git diff ${base_sha} ${head_sha}`).toString()
+  return execSync(`git diff ${base_sha} ${head_sha}`, {
+    cwd: repo_path
+  }).toString()
 }
