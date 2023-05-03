@@ -390,9 +390,6 @@ class PullRequest {
         this.pull_number = github.context.payload.pull_request.number;
     }
     // Get all of the approved reviews for the PR in chronological order.
-    // Ideally the return type should be
-    // RestEndpointMethodTypes["pulls"]["listReviews"]["response"]
-    // but something screwy right now with the imports not picking up the types.
     getApprovedReviews() {
         return __awaiter(this, void 0, void 0, function* () {
             // Use paginate() to ensure we get all of the reviews, and dismiss all of the
@@ -402,7 +399,12 @@ class PullRequest {
                 repo: this.repo,
                 pull_number: this.pull_number,
             });
-            return reviews.filter((review) => review.state === 'APPROVED');
+            // log the reviews to help debug
+            core.info(`found ${reviews.length} reviews`);
+            for (const review of reviews) {
+                core.info(`review: ${review.id} ${review.commit_id} ${review.state} ${review.submitted_at}`);
+            }
+            return reviews.filter(review => review.state === 'APPROVED');
         });
     }
     dismissApprovals(message) {
