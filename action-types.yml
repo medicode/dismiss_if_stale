@@ -1,0 +1,20 @@
+# See https://github.com/krzema12/github-actions-typing
+
+inputs:
+  mode:
+    type: enum
+    allowed-values:
+      - check-for-approvals
+      - dismiss-stale-reviews
+  path_to_cached_diff:
+    type: string
+  token:
+    type: string
+  diffs_directory:
+    type: string
+  repo_path:
+    type: string
+outputs:
+  approved_sha:
+    type: string
+
