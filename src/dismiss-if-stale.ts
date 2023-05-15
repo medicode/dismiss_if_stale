@@ -8,7 +8,7 @@ import * as core from '@actions/core'
 import * as github from '@actions/github'
 import {PayloadRepository} from '@actions/github/lib/interfaces'
 import {PullRequest} from './pull-request'
-import {execSync} from 'child_process'
+import {execSync, spawnSync} from 'child_process'
 
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
@@ -183,6 +183,9 @@ function genTwoDotDiff({
       `gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`,
       {
         env,
+        stdio: 'ignore', // drop maybe large output - it's not important
+        // all of the execSync calls below haven't had their output suppressed because
+        // it can be useful for debugging, and they shouldn't be too large
       }
     )
     core.debug('Configuring git to use gh as a credential helper.')
@@ -201,8 +204,13 @@ function genTwoDotDiff({
 
   // generate the diff
   core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
-  return execSync(`git diff ${base_sha} ${head_sha}`, {
+  // Use spawn instead of exec here because we want to get the (potentially large)
+  // output of the diff command as a string.
+  // Refer to
+  // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
+  // for more details on using exec vs spawn.
+  return spawnSync(`git diff ${base_sha} ${head_sha}`, [], {
     env,
     cwd: repo_path,
-  }).toString()
+  }).stdout.toString()
 }
