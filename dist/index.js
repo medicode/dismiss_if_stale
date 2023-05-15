@@ -218,6 +218,9 @@ function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
         env = Object.assign(Object.assign({}, env), { GITHUB_TOKEN: token });
         (0, child_process_1.execSync)(`gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`, {
             env,
+            stdio: 'ignore', // drop maybe large output - it's not important
+            // all of the execSync calls below haven't had their output suppressed because
+            // it can be useful for debugging, and they shouldn't be too large
         });
         core.debug('Configuring git to use gh as a credential helper.');
         (0, child_process_1.execSync)('gh auth setup-git', {
@@ -233,10 +236,15 @@ function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
     });
     // generate the diff
     core.debug(`Generating diff between ${base_sha} and ${head_sha}.`);
-    return (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
+    // Use spawn instead of exec here because we want to get the (potentially large)
+    // output of the diff command as a string.
+    // Refer to
+    // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
+    // for more details on using exec vs spawn.
+    return (0, child_process_1.spawnSync)(`git diff ${base_sha} ${head_sha}`, [], {
         env,
         cwd: repo_path,
-    }).toString();
+    }).stdout.toString();
 }
 
 

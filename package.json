@@ -1,6 +1,6 @@
 {
   "name": "dismiss-if-stale",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "private": true,
   "description": "A GitHub Action to facilitate dismissing stale reviews",
   "main": "lib/main.js",
