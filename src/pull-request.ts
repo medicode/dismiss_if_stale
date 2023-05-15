@@ -86,6 +86,8 @@ export class PullRequest {
         issue_number: this.pull_number,
       }
     )
+    // @ts-expect-error: unclear why tsc thinks `id` can be undefined, and irrelevant to
+    // our usage of events anyways
     return events
   }
 
