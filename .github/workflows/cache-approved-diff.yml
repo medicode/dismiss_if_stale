@@ -28,7 +28,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Cache the diff. The cache is scoped to the current branch and the "default"
       # branch aka develop.
-      - uses: actions/cache@v3
+      - uses: actions/cache/save@v3
         with:
           path: approved.diff
           # we key by the commit corresponding to when the PR was approved

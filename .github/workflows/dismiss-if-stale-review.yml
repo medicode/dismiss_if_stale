@@ -59,7 +59,7 @@ jobs:
       # Notably, the cached diff is the only way to reliably know the reviewed diff in
       # the case of the target branch changing because that branch was merged and
       # deleted.
-      - uses: actions/cache@v3
+      - uses: actions/cache/restore@v3
         if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
           path: approved.diff
