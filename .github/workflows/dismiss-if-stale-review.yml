@@ -26,6 +26,8 @@ on:  # specify when to trigger the workflow
     - master
     - develop
     - main
+    # following was added to manually test the workflow
+    - kv/simulate-patch
   # Note that the pull_request event doesn't get triggered if there are merge
   # conflicts[1].
   # This is handy for the case of a stack of PRs being rebased and the base branch
