@@ -6,7 +6,7 @@ import {execSync, spawnSync} from 'child_process'
 export class GitRepo {
   token: string
   // for some reason eslint doesn't like NodeJS here, seems like it could be a bug
-  // from Googling around e.g. https://github.com/Chatie/eslint-config/issues/45
+  // from googling around e.g. https://github.com/Chatie/eslint-config/issues/45
   // eslint-disable-next-line no-undef
   exec_env: NodeJS.ProcessEnv
   repo_full_name: string
