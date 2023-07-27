@@ -88,7 +88,7 @@ const github = __importStar(__nccwpck_require__(5438));
 const git_repo_1 = __nccwpck_require__(8432);
 const pull_request_1 = __nccwpck_require__(1843);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
+function dismissIfStale({ token, path_to_cached_diff, repo_path, dry_run, }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -220,7 +220,12 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
                 msg = 'Code has changed, dismissing stale reviews.';
             }
             core.notice(msg);
-            yield pull_request.dismissApprovals(msg);
+            if (dry_run) {
+                core.notice('Dry run: would have dismissed approvals.');
+            }
+            else {
+                yield pull_request.dismissApprovals(msg);
+            }
         }
     });
 }
@@ -410,6 +415,7 @@ function run() {
                         required: true,
                     }),
                     repo_path: core.getInput('repo_path', { required: true }),
+                    dry_run: core.getBooleanInput('dry_run'),
                 });
             }
         }

@@ -16,10 +16,12 @@ export async function dismissIfStale({
   token,
   path_to_cached_diff,
   repo_path,
+  dry_run,
 }: {
   token: string
   path_to_cached_diff: string
   repo_path: string
+  dry_run: boolean
 }): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
   // was changed (edited event was triggered and the changes field of the event
@@ -172,7 +174,11 @@ export async function dismissIfStale({
       msg = 'Code has changed, dismissing stale reviews.'
     }
     core.notice(msg)
-    await pull_request.dismissApprovals(msg)
+    if (dry_run) {
+      core.notice('Dry run: would have dismissed approvals.')
+    } else {
+      await pull_request.dismissApprovals(msg)
+    }
   }
 }
 

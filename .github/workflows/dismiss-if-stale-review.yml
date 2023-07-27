@@ -69,3 +69,4 @@ jobs:
         with:
           mode: dismiss-stale-reviews
           path_to_cached_diff: approved.diff
+          dry_run: true
