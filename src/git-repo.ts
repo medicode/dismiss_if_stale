@@ -78,9 +78,41 @@ export class GitRepo {
     // Refer to
     // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
     // for more details on using exec vs spawn.
-    return spawnSync(`git diff ${base_sha} ${head_sha}`, [], {
+    try {
+      const check_rev1 = execSync(`git log --name-only -n 20 ${base_sha}`, {
+        env: this.exec_env,
+        cwd: this.repo_path,
+      })
+      core.info(`check_rev1 = ${check_rev1}`)
+    } catch (error) {
+      core.info(`check_rev1 error = ${error}`)
+    }
+    try {
+      const check_rev2 = execSync(`git log --name-only -n 20 ${head_sha}`, {
+        env: this.exec_env,
+        cwd: this.repo_path,
+      })
+      core.info(`check_rev2 = ${check_rev2}`)
+    } catch (error) {
+      core.info(`check_rev2 error = ${error}`)
+    }
+    const stdout = execSync(`git diff ${base_sha} ${head_sha}`, {
       env: this.exec_env,
       cwd: this.repo_path,
-    }).stdout.toString()
+    })
+    core.info(`execSync stdout = ${stdout}`)
+
+    const result = spawnSync('git', ['diff', base_sha, head_sha], {
+      env: this.exec_env,
+      cwd: this.repo_path,
+    })
+    if (result.status !== 0) {
+      core.warning(`git diff failed with status ${result.status}.`)
+      core.debug(`git diff stderr:\n${result.stderr.toString()}`)
+    }
+    core.info(`result = ${JSON.stringify(result)}`)
+    core.debug(`git diff stdout:\n${result.stdout}`)
+    core.debug(`git diff stderr:\n${result.stderr}`)
+    return result.stdout.toString()
   }
 }

@@ -52,7 +52,7 @@ export async function dismissIfStale({
   let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
   if (reviewed_diff) {
     reviewed_diff = normalizeDiff(reviewed_diff)
-    core.debug(`reviewed_diff:\n${reviewed_diff}`)
+    //core.debug(`reviewed_diff:\n${reviewed_diff}`)
     if (diffs_dir) {
       fs.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff)
     }
@@ -130,7 +130,7 @@ export async function dismissIfStale({
         head_sha: pull_request_payload.head.sha,
       })
     )
-    core.debug(`current two dot diff:\n${current_diff}`)
+    // core.debug(`current two dot diff:\n${current_diff}`)
 
     if (reviewed_diff !== current_diff && pull_request_payload.rebaseable) {
       let rebased = false
