@@ -27,6 +27,11 @@ inputs:
       using git and the repo directly.
       Only relevant in dismiss-stale-reviews mode.
     default: '${{ github.workspace }}'
+  dry_run:
+    description: >
+      If true, then the action will not actually dismiss any reviews. Useful for
+      debugging. Only relevant in dismiss-stale-reviews mode.
+    default: false
 outputs:
   approved_sha:
     description: >

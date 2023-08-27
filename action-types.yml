@@ -14,6 +14,8 @@ inputs:
     type: string
   repo_path:
     type: string
+  dry_run:
+    type: boolean
 outputs:
   approved_sha:
     type: string
