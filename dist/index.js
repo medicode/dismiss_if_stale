@@ -329,6 +329,7 @@ class GitRepo {
     }
     // throws an Error if the rebase fails
     rebase({ head, onto }) {
+        core.info(`Rebasing ${head} onto ${onto}.`);
         (0, child_process_1.execSync)(`git rebase --onto ${onto} ${head}`, {
             env: this.exec_env,
             cwd: this.repo_path,
