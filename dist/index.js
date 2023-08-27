@@ -113,7 +113,7 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, dry_run, }) {
         let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
         if (reviewed_diff) {
             reviewed_diff = normalizeDiff(reviewed_diff);
-            //core.debug(`reviewed_diff:\n${reviewed_diff}`)
+            core.debug(`reviewed_diff:\n${reviewed_diff}`);
             if (diffs_dir) {
                 fs_1.default.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff);
             }
@@ -180,7 +180,7 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, dry_run, }) {
                 base_sha: pull_request_payload.base.sha,
                 head_sha: pull_request_payload.head.sha,
             }));
-            // core.debug(`current two dot diff:\n${current_diff}`)
+            core.debug(`current two dot diff:\n${current_diff}`);
             if (reviewed_diff !== current_diff && pull_request_payload.rebaseable) {
                 let rebased = false;
                 try {
@@ -341,31 +341,6 @@ class GitRepo {
         // Refer to
         // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
         // for more details on using exec vs spawn.
-        try {
-            const check_rev1 = (0, child_process_1.execSync)(`git log --name-only -n 20 ${base_sha}`, {
-                env: this.exec_env,
-                cwd: this.repo_path,
-            });
-            core.info(`check_rev1 = ${check_rev1}`);
-        }
-        catch (error) {
-            core.info(`check_rev1 error = ${error}`);
-        }
-        try {
-            const check_rev2 = (0, child_process_1.execSync)(`git log --name-only -n 20 ${head_sha}`, {
-                env: this.exec_env,
-                cwd: this.repo_path,
-            });
-            core.info(`check_rev2 = ${check_rev2}`);
-        }
-        catch (error) {
-            core.info(`check_rev2 error = ${error}`);
-        }
-        const stdout = (0, child_process_1.execSync)(`git diff ${base_sha} ${head_sha}`, {
-            env: this.exec_env,
-            cwd: this.repo_path,
-        });
-        core.info(`execSync stdout = ${stdout}`);
         const result = (0, child_process_1.spawnSync)('git', ['diff', base_sha, head_sha], {
             env: this.exec_env,
             cwd: this.repo_path,
@@ -374,9 +349,6 @@ class GitRepo {
             core.warning(`git diff failed with status ${result.status}.`);
             core.debug(`git diff stderr:\n${result.stderr.toString()}`);
         }
-        core.info(`result = ${JSON.stringify(result)}`);
-        core.debug(`git diff stdout:\n${result.stdout}`);
-        core.debug(`git diff stderr:\n${result.stderr}`);
         return result.stdout.toString();
     }
 }
