@@ -21,6 +21,7 @@ async function run(): Promise<void> {
           required: true,
         }),
         repo_path: core.getInput('repo_path', {required: true}),
+        dry_run: core.getBooleanInput('dry_run'),
       })
     }
   } catch (error) {

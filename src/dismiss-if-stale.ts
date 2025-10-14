@@ -4,21 +4,24 @@
 // This script is intended to run in a GitHub Actions workflow.
 
 import fs from 'fs'
+
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import {PayloadRepository} from '@actions/github/lib/interfaces'
+
+import {GitRepo} from './git-repo'
 import {PullRequest} from './pull-request'
-import {execSync, spawnSync} from 'child_process'
 
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
   token,
   path_to_cached_diff,
   repo_path,
+  dry_run,
 }: {
   token: string
   path_to_cached_diff: string
   repo_path: string
+  dry_run: boolean
 }): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
   // was changed (edited event was triggered and the changes field of the event
@@ -55,7 +58,7 @@ export async function dismissIfStale({
     }
   }
 
-  // Generate the current diff.
+  // Generate the current (three dot) diff.
   const pull_request_payload = github.context.payload.pull_request
   if (!pull_request_payload) {
     throw new Error('This action must be run on a pull request.')
@@ -71,38 +74,89 @@ export async function dismissIfStale({
     // Consider the case of
     //
     //   main -> branch1 -> branch2
+    //        \-> branch3
     //
-    // where branch2 is the PR branch and branch1 is the base branch.
+    // where
+    // * branch2 is the PR branch
+    // * branch1 is the base branch
+    // * branch3 is a separate PR branch
     //
-    // If branch1 was just merged into main and branch2 can be cleanly merged into main,
+    // If branch1 is merged into main and branch2 can be cleanly merged into main,
     // then the three dot diff computed by GitHub (the diff with respect to the common
-    // ancestor of main and branch2) will show the changes from branch2 and branch1.
+    // ancestor of main and branch2) will show the changes from branch2 and branch1
+    // (and thus the diff won't match since current_diff contains the changes from
+    // branch1 as well).
     // The changes themselves haven't actually changed, this is just an artifact of the
     // type of diff being computed.
-    // We instead want to compute a two dot diff (the straight diff between the files in
-    // the repository at these two commits) - in this case if the only changes on main
-    // are the recently merged in changes from branch1, then this will result in a diff
-    // showing only the changes from branch2.
-    // Technically, if there are additional changes landed into the base branch before
-    // we compute the two dot diff here, then the review will be considered stale even
-    // though the code changes on branch2 are still the same - this is an accepted
-    // limitation.
+    //
+    // A two dot diff of branch2 versus main (which now contains changes from branch1)
+    // would show the correct, current diff, but there is an edge case here.
+    // Consider the case where branch1 is merged, and shortly after, branch3 is merged.
+    // The three dot diff will have the same problem noted above, and the two dot diff
+    // would include the diff between branch2 and branch3 (which is not what we want).
+    // What we really want is the diff that would be applied if branch2 were rebased on
+    // top of main.
+    //
+    // So we compute the two dot diff, and, if that still doesn't match, try a rebase
+    // and compute the diff then.
     if (!github.context.payload.repository) {
       throw new Error(
         'This action must be run on a pull request with repository made available in ' +
           'the payload.'
       )
     }
+    const repository = github.context.payload.repository
+    if (!repository.full_name) {
+      throw new Error(
+        'This action must be run on a pull request with a repository and full_name ' +
+          'made available in the payload.'
+      )
+    }
+    // GitHub API doesn't support generating two-dot diffs (diffs between files in two
+    // commits), so we do it ourselves by
+    // 1. clone the repo if needed
+    // 2. fetch the base and head commits
+    // 3. generate the diff using git diff
+    const repo = new GitRepo({
+      token,
+      repo_full_name: repository.full_name,
+      repo_path,
+    })
+    repo.cloneIfNeeded()
+    repo.fetch(pull_request_payload.base.sha, pull_request_payload.head.sha)
     current_diff = normalizeDiff(
-      genTwoDotDiff({
-        repository: github.context.payload.repository,
-        token,
-        repo_path,
+      repo.diff({
         base_sha: pull_request_payload.base.sha,
         head_sha: pull_request_payload.head.sha,
       })
     )
     core.debug(`current two dot diff:\n${current_diff}`)
+
+    if (reviewed_diff !== current_diff && pull_request_payload.rebaseable) {
+      let rebased = false
+      try {
+        repo.rebase({
+          head: pull_request_payload.head.sha,
+          onto: pull_request_payload.base.sha,
+        })
+        rebased = true
+      } catch (error) {
+        if (error instanceof Error) {
+          core.warning(
+            `Unable to rebase ${pull_request_payload.head.sha} onto ` +
+              `${pull_request_payload.base.sha}: ${error.message}`
+          )
+        }
+      }
+      if (rebased) {
+        current_diff = normalizeDiff(
+          repo.diff({
+            base_sha: pull_request_payload.base.sha,
+            head_sha: pull_request_payload.head.sha,
+          })
+        )
+      }
+    }
   }
   if (diffs_dir) {
     fs.writeFileSync(`${diffs_dir}/current.diff`, current_diff)
@@ -120,7 +174,11 @@ export async function dismissIfStale({
       msg = 'Code has changed, dismissing stale reviews.'
     }
     core.notice(msg)
-    await pull_request.dismissApprovals(msg)
+    if (dry_run) {
+      core.notice('Dry run: would have dismissed approvals.')
+    } else {
+      await pull_request.dismissApprovals(msg)
+    }
   }
 }
 
@@ -146,71 +204,4 @@ function normalizeDiff(diff: string): string {
   //     Basically, these are the "index <sha1>..<sha2>" lines in the diff output.
   //     Note that these lines may be terminated by an optional " <mode>" suffix.
   return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '')
-}
-
-function genTwoDotDiff({
-  repository,
-  token,
-  repo_path,
-  base_sha,
-  head_sha,
-}: {
-  repository: PayloadRepository
-  token: string
-  repo_path: string
-  base_sha: string
-  head_sha: string
-}): string {
-  // GitHub API doesn't support generating two-dot diffs (diffs between files in two
-  // commits), so we do it ourselves by
-  // 1. clone the repo if needed
-  // 2. fetch the base and head commits
-  // 3. generate the diff using git diff
-
-  // clone the repo if needed
-  let env = process.env
-  if (!fs.existsSync(repo_path)) {
-    core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
-    fs.mkdirSync(repo_path, {recursive: true})
-    // Use gh versus git clone - makes authentication via token easier.
-    // Note that the env here is propagated to subsequent git commands - this is
-    // needed for gh to use the token.
-    env = {
-      ...env,
-      GITHUB_TOKEN: token,
-    }
-    execSync(
-      `gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`,
-      {
-        env,
-        stdio: 'ignore', // drop maybe large output - it's not important
-        // all of the execSync calls below haven't had their output suppressed because
-        // it can be useful for debugging, and they shouldn't be too large
-      }
-    )
-    core.debug('Configuring git to use gh as a credential helper.')
-    execSync('gh auth setup-git', {
-      env,
-      cwd: repo_path,
-    })
-  }
-
-  // fetch the base and head commits
-  core.debug(`Fetching ${base_sha} and ${head_sha}.`)
-  execSync(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
-    env,
-    cwd: repo_path,
-  })
-
-  // generate the diff
-  core.debug(`Generating diff between ${base_sha} and ${head_sha}.`)
-  // Use spawn instead of exec here because we want to get the (potentially large)
-  // output of the diff command as a string.
-  // Refer to
-  // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
-  // for more details on using exec vs spawn.
-  return spawnSync(`git diff ${base_sha} ${head_sha}`, [], {
-    env,
-    cwd: repo_path,
-  }).stdout.toString()
 }
