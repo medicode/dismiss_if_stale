@@ -39,9 +39,6 @@ export class PullRequest {
   }
 
   // Get all of the approved reviews for the PR in chronological order.
-  // Ideally the return type should be
-  // RestEndpointMethodTypes["pulls"]["listReviews"]["response"]
-  // but something screwy right now with the imports not picking up the types.
   async getApprovedReviews(): Promise<ListOfReviews> {
     // Use paginate() to ensure we get all of the reviews, and dismiss all of the
     // approvals.
@@ -53,10 +50,15 @@ export class PullRequest {
         pull_number: this.pull_number,
       }
     )
+    // log the reviews to help debug
+    core.info(`found ${reviews.length} reviews`)
+    for (const review of reviews) {
+      core.info(
+        `review: ${review.id} ${review.commit_id} ${review.state} ${review.submitted_at}`
+      )
+    }
 
-    return reviews.filter(
-      (review: {state: string}) => review.state === 'APPROVED'
-    )
+    return reviews.filter(review => review.state === 'APPROVED')
   }
 
   async dismissApprovals(message: string): Promise<void> {
