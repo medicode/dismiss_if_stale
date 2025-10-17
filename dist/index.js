@@ -113,7 +113,8 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
         let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
         if (reviewed_diff) {
             reviewed_diff = normalizeDiff(reviewed_diff);
-            core.debug(`reviewed_diff:\n${reviewed_diff}`);
+            const reviewed_diff_snippet = reviewed_diff.slice(0, 5000);
+            core.debug(`reviewed_diff (first 5000 characters):\n${reviewed_diff_snippet}`);
             if (diffs_dir) {
                 fs_1.default.writeFileSync(`${diffs_dir}/reviewed.diff`, reviewed_diff);
             }
@@ -125,7 +126,9 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
         }
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
-        core.debug(`current three dot diff:\n${current_diff}`);
+        const current_three_dot_diff_snippet = current_diff.slice(0, 5000);
+        core.debug(`current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`);
+        let msg = '';
         if (reviewed_diff && reviewed_diff !== current_diff) {
             // Consider the case of
             //
@@ -150,28 +153,35 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
                 throw new Error('This action must be run on a pull request with repository made available in ' +
                     'the payload.');
             }
-            current_diff = normalizeDiff(genTwoDotDiff({
+            const twoDot = genTwoDotDiff({
                 repository: github.context.payload.repository,
                 token,
                 repo_path,
                 base_sha: pull_request_payload.base.sha,
                 head_sha: pull_request_payload.head.sha,
-            }));
-            core.debug(`current two dot diff:\n${current_diff}`);
+            });
+            if (twoDot !== null) {
+                current_diff = normalizeDiff(twoDot);
+                const current_two_dot_diff_snippet = current_diff.slice(0, 5000);
+                core.debug(`current two dot diff (first 5000 characters):\n${current_two_dot_diff_snippet}`);
+            }
+            else {
+                msg =
+                    'Unable to compute two-dot diff (too large or failed). Pessimistically dismissing stale reviews.';
+            }
         }
         if (diffs_dir) {
             fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
         }
-        // If the diffs are different or we weren't able to get the reviewed diff, then the
-        // review is (pessimistically) considered stale.
+        // If the diffs are different, unable to generate the current diff, or we weren't able
+        // to get the reviewed diff, then the review is (pessimistically) considered stale.
         if (reviewed_diff !== current_diff) {
-            let msg;
             if (!reviewed_diff) {
                 msg =
                     'Unable to get the most recently reviewed diff. ' +
                         'Pessimistically dismissing stale reviews.';
             }
-            else {
+            else if (msg === '') {
                 msg = 'Code has changed, dismissing stale reviews.';
             }
             core.notice(msg);
@@ -241,10 +251,39 @@ function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
     // Refer to
     // https://www.hacksparrow.com/nodejs/difference-between-spawn-and-exec-of-node-js-child-rocess.html
     // for more details on using exec vs spawn.
-    return (0, child_process_1.spawnSync)(`git diff ${base_sha} ${head_sha}`, [], {
-        env,
+    const diffResult = (0, child_process_1.spawnSync)('git', [
+        '-c',
+        'core.pager=cat',
+        'diff',
+        '--no-ext-diff',
+        '--no-color',
+        base_sha,
+        head_sha,
+    ], {
+        env: Object.assign(Object.assign({}, env), { GIT_PAGER: 'cat' }),
         cwd: repo_path,
-    }).stdout.toString();
+        encoding: 'utf8',
+        // Keep a reasonable buffer; if exceeded we'll return null and pessimistically dismiss
+        maxBuffer: 32 * 1024 * 1024,
+    });
+    if (diffResult.error) {
+        const err = diffResult.error;
+        const codeInfo = (err === null || err === void 0 ? void 0 : err.code) ? ` code=${err.code}` : '';
+        if ((err === null || err === void 0 ? void 0 : err.code) === 'ENOBUFS') {
+            core.warning(`git diff output exceeded buffer (${repo_path}). Returning null to allow pessimistic dismissal.${codeInfo}`);
+            return null;
+        }
+        core.error(`Failed to spawn git diff in ${repo_path}: ${String((err === null || err === void 0 ? void 0 : err.message) || err)}${codeInfo}`);
+        return null;
+    }
+    // git diff returns 0 (no changes) or 1 (changes found). >1 indicates an error.
+    if (typeof diffResult.status === 'number' && diffResult.status > 1) {
+        const stderr = (diffResult.stderr || '').toString();
+        core.error(`git diff exited with code ${diffResult.status} (cwd=${repo_path}). stderr:\n${stderr}`);
+        return null;
+    }
+    // With encoding set, stdout is guaranteed to be a string.
+    return diffResult.stdout || '';
 }
 
 
