@@ -17,4 +17,6 @@ inputs:
 outputs:
   approved_sha:
     type: string
+  review_id:
+    type: string
 
