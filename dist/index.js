@@ -92,8 +92,9 @@ const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const pull_request_1 = __nccwpck_require__(1843);
 const child_process_1 = __nccwpck_require__(2081);
+const range_diff_1 = __nccwpck_require__(9776);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
+function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, repo_path, }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -115,6 +116,24 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
         }
         const pull_request = new pull_request_1.PullRequest(token);
         const diffs_dir = core.getInput('diffs_directory');
+        const pull_request_payload = github.context.payload.pull_request;
+        if (!pull_request_payload) {
+            throw new Error('This action must be run on a pull request.');
+        }
+        // Try range-diff check first as a "fast pass" - if it shows no changes,
+        // we can exit early without doing the more expensive diff comparison.
+        const rangeDiffResult = yield tryRangeDiffCheck({
+            path_to_cached_metadata,
+            pull_request,
+            repo_path,
+            current_head: pull_request_payload.head.sha,
+            base_ref: pull_request_payload.base.ref,
+        });
+        if (rangeDiffResult === 'not_stale') {
+            core.notice('Range-diff shows no changes to commits since approval. Review is not stale.');
+            return;
+        }
+        // If rangeDiffResult is 'stale' or 'fallback', continue to existing diff comparison
         let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
         if (reviewed_diff) {
             reviewed_diff = normalizeDiff(reviewed_diff);
@@ -125,10 +144,6 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
             }
         }
         // Generate the current diff.
-        const pull_request_payload = github.context.payload.pull_request;
-        if (!pull_request_payload) {
-            throw new Error('This action must be run on a pull request.');
-        }
         let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
         current_diff = normalizeDiff(current_diff);
         const current_three_dot_diff_snippet = current_diff.slice(0, 5000);
@@ -195,6 +210,78 @@ function dismissIfStale({ token, path_to_cached_diff, repo_path, }) {
     });
 }
 exports.dismissIfStale = dismissIfStale;
+/**
+ * Try to determine staleness using git range-diff.
+ *
+ * Range-diff compares two commit ranges and identifies if commits were modified,
+ * added, or removed. This is more accurate than diff comparison for rebases
+ * that don't change the actual code.
+ *
+ * @returns 'not_stale' if range-diff confirms no changes, 'stale' if changes detected,
+ *          'fallback' if range-diff couldn't be run (missing metadata, git error, etc.)
+ */
+function tryRangeDiffCheck({ path_to_cached_metadata, pull_request, repo_path, current_head, base_ref, }) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Load cached metadata
+        core.debug(`Checking for cached metadata at ${path_to_cached_metadata}.`);
+        if (!path_to_cached_metadata || !fs_1.default.existsSync(path_to_cached_metadata)) {
+            core.debug('No cached metadata found, falling back to diff comparison.');
+            return 'fallback';
+        }
+        let metadata;
+        try {
+            const rawMetadata = fs_1.default.readFileSync(path_to_cached_metadata, {
+                encoding: 'utf8',
+            });
+            metadata = JSON.parse(rawMetadata);
+            core.debug(`Loaded approval metadata: ${JSON.stringify(metadata)}`);
+        }
+        catch (error) {
+            core.warning(`Failed to parse cached metadata: ${error instanceof Error ? error.message : String(error)}`);
+            return 'fallback';
+        }
+        // Validate metadata version and required fields
+        if (metadata.version !== 1) {
+            core.warning(`Unsupported metadata version: ${metadata.version}, falling back to diff comparison.`);
+            return 'fallback';
+        }
+        if (!metadata.approved_sha || !metadata.merge_base_sha) {
+            core.warning('Metadata missing required fields (approved_sha or merge_base_sha), falling back.');
+            return 'fallback';
+        }
+        // Get current merge base
+        let currentMergeBase;
+        try {
+            currentMergeBase = yield pull_request.getMergeBase(base_ref, current_head);
+            core.debug(`Current merge base: ${currentMergeBase}`);
+        }
+        catch (error) {
+            core.warning(`Failed to get current merge base: ${error instanceof Error ? error.message : String(error)}`);
+            return 'fallback';
+        }
+        // Run git range-diff
+        const rangeDiffOutput = (0, range_diff_1.runRangeDiff)({
+            repoPath: repo_path,
+            prevMergeBase: metadata.merge_base_sha,
+            approvedSha: metadata.approved_sha,
+            currMergeBase: currentMergeBase,
+            currentHead: current_head,
+        });
+        if (rangeDiffOutput === null) {
+            core.debug('Range-diff failed, falling back to diff comparison.');
+            return 'fallback';
+        }
+        const result = (0, range_diff_1.parseRangeDiffOutput)(rangeDiffOutput);
+        core.debug(`Range-diff result: ${JSON.stringify(result)}`);
+        if (result.isStale) {
+            core.info(`Range-diff detected changes: ${result.summary}`);
+            // Continue to diff comparison for final determination
+            return 'stale';
+        }
+        core.info(`Range-diff shows no changes: ${result.summary}`);
+        return 'not_stale';
+    });
+}
 function genReviewedDiff(path_to_cached_diff, pull_request) {
     return __awaiter(this, void 0, void 0, function* () {
         // check if the cached diff exists
@@ -358,6 +445,7 @@ function run() {
                     path_to_cached_diff: core.getInput('path_to_cached_diff', {
                         required: true,
                     }),
+                    path_to_cached_metadata: core.getInput('path_to_cached_metadata'),
                     repo_path: core.getInput('repo_path', { required: true }),
                 });
             }
@@ -560,8 +648,168 @@ class PullRequest {
             }
         });
     }
+    getMergeBase(base, head) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield this.octokit.rest.repos.compareCommitsWithBasehead({
+                owner: this.owner,
+                repo: this.repo,
+                basehead: `${base}...${head}`,
+            });
+            return response.data.merge_base_commit.sha;
+        });
+    }
 }
 exports.PullRequest = PullRequest;
+
+
+/***/ }),
+
+/***/ 9776:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+// Module for git range-diff execution and output parsing
+// Used to detect if PR reviews are stale by comparing commit ranges
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runRangeDiff = exports.parseRangeDiffOutput = void 0;
+const core = __importStar(__nccwpck_require__(2186));
+const child_process_1 = __nccwpck_require__(2081);
+/**
+ * Parse git range-diff output to determine if reviews are stale.
+ *
+ * git range-diff outputs lines in the format:
+ * - "N: <sha> = N: <sha> <subject>" for identical commits
+ * - "N: <sha> ! N: <sha> <subject>" for modified commits (followed by diff details)
+ * - "-: ------- > N: <sha> <subject>" for added commits
+ * - "N: <sha> < -: ------- <subject>" for removed commits
+ *
+ * If the output is empty or contains only identical commits (=), the review is not stale.
+ * Any modified (!), added (>), or removed (<) commits indicate the review is stale.
+ */
+function parseRangeDiffOutput(output) {
+    // Empty output means no changes between the ranges
+    if (!output || output.trim() === '') {
+        return { isStale: false, summary: 'No changes detected' };
+    }
+    const lines = output.split('\n');
+    let identicalCount = 0;
+    let modifiedCount = 0;
+    let addedCount = 0;
+    let removedCount = 0;
+    for (const line of lines) {
+        // Skip empty lines and diff detail lines (indented lines that follow ! markers)
+        if (!line || line.startsWith(' ') || line.startsWith('\t')) {
+            continue;
+        }
+        // Match the range-diff output format
+        // Format: "N: <sha> <marker> N: <sha> <subject>" or "-: ------- <marker> ..."
+        // The marker is one of: =, !, <, >
+        const markerMatch = line.match(/^\s*-?(\d+)?:\s+[0-9a-f-]+\s+([=!<>])\s+-?(\d+)?:/);
+        if (markerMatch) {
+            const marker = markerMatch[2];
+            switch (marker) {
+                case '=':
+                    identicalCount++;
+                    break;
+                case '!':
+                    modifiedCount++;
+                    break;
+                case '>':
+                    addedCount++;
+                    break;
+                case '<':
+                    removedCount++;
+                    break;
+            }
+        }
+    }
+    const hasChanges = modifiedCount > 0 || addedCount > 0 || removedCount > 0;
+    if (hasChanges) {
+        const parts = [];
+        if (modifiedCount > 0)
+            parts.push(`${modifiedCount} modified`);
+        if (addedCount > 0)
+            parts.push(`${addedCount} added`);
+        if (removedCount > 0)
+            parts.push(`${removedCount} removed`);
+        return {
+            isStale: true,
+            summary: `Commits changed: ${parts.join(', ')}`,
+        };
+    }
+    return {
+        isStale: false,
+        summary: identicalCount > 0
+            ? `${identicalCount} identical commit(s)`
+            : 'No changes detected',
+    };
+}
+exports.parseRangeDiffOutput = parseRangeDiffOutput;
+/**
+ * Run git range-diff to compare two commit ranges.
+ *
+ * @param params.repoPath - Path to the git repository
+ * @param params.prevMergeBase - The merge base at the time of approval
+ * @param params.approvedSha - The commit SHA that was approved
+ * @param params.currMergeBase - The current merge base
+ * @param params.currentHead - The current HEAD commit
+ * @returns The range-diff output as a string, or null if the command failed
+ */
+function runRangeDiff(params) {
+    const { repoPath, prevMergeBase, approvedSha, currMergeBase, currentHead } = params;
+    // Construct the range-diff command
+    // git range-diff prevMergeBase..approvedSha currMergeBase..currentHead
+    const range1 = `${prevMergeBase}..${approvedSha}`;
+    const range2 = `${currMergeBase}..${currentHead}`;
+    core.debug(`Running git range-diff ${range1} ${range2} in ${repoPath}`);
+    const result = (0, child_process_1.spawnSync)('git', ['range-diff', '--no-color', range1, range2], {
+        cwd: repoPath,
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024, // 32MB buffer
+    });
+    if (result.error) {
+        const err = result.error;
+        if ((err === null || err === void 0 ? void 0 : err.code) === 'ENOBUFS') {
+            core.warning(`git range-diff output exceeded buffer. Falling back to diff comparison.`);
+        }
+        else {
+            core.warning(`git range-diff failed: ${err.message}${err.code ? ` (code: ${err.code})` : ''}`);
+        }
+        return null;
+    }
+    // git range-diff returns 0 on success
+    if (result.status !== 0) {
+        const stderr = (result.stderr || '').toString();
+        core.warning(`git range-diff exited with code ${result.status}. stderr:\n${stderr}`);
+        return null;
+    }
+    return result.stdout || '';
+}
+exports.runRangeDiff = runRangeDiff;
 
 
 /***/ }),
