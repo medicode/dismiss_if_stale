@@ -60,5 +60,6 @@ jobs:
           path: |
             approval-metadata.json
             approved.diff
-          # we key by the commit corresponding to when the PR was approved
-          key: approval-${{ github.event.pull_request.head.sha }}
+          # Key by review ID - this is immutable even after force pushes
+          # (unlike commit SHA which GitHub updates on the review object)
+          key: approval-${{ github.event.review.id }}
