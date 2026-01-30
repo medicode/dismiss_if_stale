@@ -7,8 +7,8 @@ require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 "use strict";
 
 // A script to check if there are any approvals on a PR.
-// Outputs the SHA of the commit for the most recent approval, or 'null' if there are
-// no approvals.
+// Outputs the SHA of the commit and review ID for the most recent approval,
+// or 'null' if there are no approvals.
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -22,13 +22,18 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.checkForApprovals = void 0;
 const pull_request_1 = __nccwpck_require__(1843);
 function checkForApprovals(token) {
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
         const reviews = new pull_request_1.PullRequest(token);
         const approved_reviews = yield reviews.getApprovedReviews();
         if (approved_reviews.length === 0) {
             return null;
         }
-        return approved_reviews[approved_reviews.length - 1].commit_id;
+        const latest = approved_reviews[approved_reviews.length - 1];
+        return {
+            approved_sha: (_a = latest.commit_id) !== null && _a !== void 0 ? _a : '',
+            review_id: latest.id,
+        };
     });
 }
 exports.checkForApprovals = checkForApprovals;
@@ -336,13 +341,15 @@ function run() {
             const mode = core.getInput('mode', { required: true });
             const token = core.getInput('token', { required: true });
             if (mode === 'check-for-approvals') {
-                const approved_sha = yield (0, check_for_approvals_1.checkForApprovals)(token);
-                core.debug(`approved_sha: ${approved_sha}`);
-                if (approved_sha != null) {
-                    core.setOutput('approved_sha', approved_sha);
+                const result = yield (0, check_for_approvals_1.checkForApprovals)(token);
+                core.debug(`approval result: ${JSON.stringify(result)}`);
+                if (result != null) {
+                    core.setOutput('approved_sha', result.approved_sha);
+                    core.setOutput('review_id', result.review_id.toString());
                 }
                 else {
                     core.setOutput('approved_sha', '');
+                    core.setOutput('review_id', '');
                 }
             }
             else if (mode === 'dismiss-stale-reviews') {

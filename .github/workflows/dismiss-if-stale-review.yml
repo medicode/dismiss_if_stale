@@ -63,14 +63,14 @@ jobs:
       # the case of the target branch changing because that branch was merged and
       # deleted.
       - uses: actions/cache/restore@v3
-        if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
+        if: ${{ steps.check.outputs.review_id != '' }}
         with:
           path: |
             approval-metadata.json
             approved.diff
-          key: approval-${{ steps.check.outputs.approved_sha }}
+          key: approval-${{ steps.check.outputs.review_id }}
       - uses: ./
-        if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
+        if: ${{ steps.check.outputs.review_id != '' }}
         with:
           mode: dismiss-stale-reviews
           # path_to_cached_metadata: approval-metadata.json  # TODO: enable when action supports it

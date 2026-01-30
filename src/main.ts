@@ -7,12 +7,14 @@ async function run(): Promise<void> {
     const mode: string = core.getInput('mode', {required: true})
     const token = core.getInput('token', {required: true})
     if (mode === 'check-for-approvals') {
-      const approved_sha = await checkForApprovals(token)
-      core.debug(`approved_sha: ${approved_sha}`)
-      if (approved_sha != null) {
-        core.setOutput('approved_sha', approved_sha)
+      const result = await checkForApprovals(token)
+      core.debug(`approval result: ${JSON.stringify(result)}`)
+      if (result != null) {
+        core.setOutput('approved_sha', result.approved_sha)
+        core.setOutput('review_id', result.review_id.toString())
       } else {
         core.setOutput('approved_sha', '')
+        core.setOutput('review_id', '')
       }
     } else if (mode === 'dismiss-stale-reviews') {
       await dismissIfStale({

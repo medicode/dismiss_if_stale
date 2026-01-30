@@ -32,6 +32,11 @@ outputs:
     description: >
       The SHA of the commit that was approved. Only set in check-for-approvals mode, and
       if there is an approval on the PR. Otherwise, this will be an empty string.
+  review_id:
+    description: >
+      The ID of the approval review. Used for cache key lookup. Only set (non-empty)
+      in check-for-approvals mode when there is an approval on the PR. Empty string
+      if there are no approvals or in dismiss-stale-reviews mode.
 runs:
   using: 'node16'
   main: 'dist/index.js'
