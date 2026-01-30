@@ -8,6 +8,8 @@ inputs:
       - dismiss-stale-reviews
   path_to_cached_diff:
     type: string
+  path_to_cached_metadata:
+    type: string
   token:
     type: string
   diffs_directory:

@@ -73,5 +73,5 @@ jobs:
         if: ${{ steps.check.outputs.review_id != '' }}
         with:
           mode: dismiss-stale-reviews
-          # path_to_cached_metadata: approval-metadata.json  # TODO: enable when action supports it
+          path_to_cached_metadata: approval-metadata.json
           path_to_cached_diff: approved.diff
