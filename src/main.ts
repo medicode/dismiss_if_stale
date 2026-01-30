@@ -20,6 +20,7 @@ async function run(): Promise<void> {
         path_to_cached_diff: core.getInput('path_to_cached_diff', {
           required: true,
         }),
+        path_to_cached_metadata: core.getInput('path_to_cached_metadata'),
         repo_path: core.getInput('repo_path', {required: true}),
       })
     }

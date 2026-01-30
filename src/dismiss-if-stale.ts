@@ -9,15 +9,22 @@ import * as github from '@actions/github'
 import {PayloadRepository} from '@actions/github/lib/interfaces'
 import {PullRequest} from './pull-request'
 import {execSync, spawnSync} from 'child_process'
+import {
+  ApprovalMetadata,
+  parseRangeDiffOutput,
+  runRangeDiff,
+} from './range-diff'
 
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
   token,
   path_to_cached_diff,
+  path_to_cached_metadata,
   repo_path,
 }: {
   token: string
   path_to_cached_diff: string
+  path_to_cached_metadata: string
   repo_path: string
 }): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
@@ -45,6 +52,28 @@ export async function dismissIfStale({
 
   const pull_request = new PullRequest(token)
   const diffs_dir = core.getInput('diffs_directory')
+  const pull_request_payload = github.context.payload.pull_request
+  if (!pull_request_payload) {
+    throw new Error('This action must be run on a pull request.')
+  }
+
+  // Try range-diff check first as a "fast pass" - if it shows no changes,
+  // we can exit early without doing the more expensive diff comparison.
+  const rangeDiffResult = await tryRangeDiffCheck({
+    path_to_cached_metadata,
+    pull_request,
+    repo_path,
+    current_head: pull_request_payload.head.sha,
+    base_ref: pull_request_payload.base.ref,
+  })
+
+  if (rangeDiffResult === 'not_stale') {
+    core.notice(
+      'Range-diff shows no changes to commits since approval. Review is not stale.'
+    )
+    return
+  }
+  // If rangeDiffResult is 'stale' or 'fallback', continue to existing diff comparison
 
   let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
   if (reviewed_diff) {
@@ -59,10 +88,6 @@ export async function dismissIfStale({
   }
 
   // Generate the current diff.
-  const pull_request_payload = github.context.payload.pull_request
-  if (!pull_request_payload) {
-    throw new Error('This action must be run on a pull request.')
-  }
   let current_diff = await pull_request.compareCommits(
     pull_request_payload.base.sha,
     pull_request_payload.head.sha
@@ -135,6 +160,110 @@ export async function dismissIfStale({
     core.notice(msg)
     await pull_request.dismissApprovals(msg)
   }
+}
+
+type RangeDiffCheckResult = 'not_stale' | 'stale' | 'fallback'
+
+/**
+ * Try to determine staleness using git range-diff.
+ *
+ * Range-diff compares two commit ranges and identifies if commits were modified,
+ * added, or removed. This is more accurate than diff comparison for rebases
+ * that don't change the actual code.
+ *
+ * @returns 'not_stale' if range-diff confirms no changes, 'stale' if changes detected,
+ *          'fallback' if range-diff couldn't be run (missing metadata, git error, etc.)
+ */
+async function tryRangeDiffCheck({
+  path_to_cached_metadata,
+  pull_request,
+  repo_path,
+  current_head,
+  base_ref,
+}: {
+  path_to_cached_metadata: string
+  pull_request: PullRequest
+  repo_path: string
+  current_head: string
+  base_ref: string
+}): Promise<RangeDiffCheckResult> {
+  // Load cached metadata
+  core.debug(`Checking for cached metadata at ${path_to_cached_metadata}.`)
+  if (!path_to_cached_metadata || !fs.existsSync(path_to_cached_metadata)) {
+    core.debug('No cached metadata found, falling back to diff comparison.')
+    return 'fallback'
+  }
+
+  let metadata: ApprovalMetadata
+  try {
+    const rawMetadata = fs.readFileSync(path_to_cached_metadata, {
+      encoding: 'utf8',
+    })
+    metadata = JSON.parse(rawMetadata) as ApprovalMetadata
+    core.debug(`Loaded approval metadata: ${JSON.stringify(metadata)}`)
+  } catch (error) {
+    core.warning(
+      `Failed to parse cached metadata: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    return 'fallback'
+  }
+
+  // Validate metadata version and required fields
+  if (metadata.version !== 1) {
+    core.warning(
+      `Unsupported metadata version: ${metadata.version}, falling back to diff comparison.`
+    )
+    return 'fallback'
+  }
+
+  if (!metadata.approved_sha || !metadata.merge_base_sha) {
+    core.warning(
+      'Metadata missing required fields (approved_sha or merge_base_sha), falling back.'
+    )
+    return 'fallback'
+  }
+
+  // Get current merge base
+  let currentMergeBase: string
+  try {
+    currentMergeBase = await pull_request.getMergeBase(base_ref, current_head)
+    core.debug(`Current merge base: ${currentMergeBase}`)
+  } catch (error) {
+    core.warning(
+      `Failed to get current merge base: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    return 'fallback'
+  }
+
+  // Run git range-diff
+  const rangeDiffOutput = runRangeDiff({
+    repoPath: repo_path,
+    prevMergeBase: metadata.merge_base_sha,
+    approvedSha: metadata.approved_sha,
+    currMergeBase: currentMergeBase,
+    currentHead: current_head,
+  })
+
+  if (rangeDiffOutput === null) {
+    core.debug('Range-diff failed, falling back to diff comparison.')
+    return 'fallback'
+  }
+
+  const result = parseRangeDiffOutput(rangeDiffOutput)
+  core.debug(`Range-diff result: ${JSON.stringify(result)}`)
+
+  if (result.isStale) {
+    core.info(`Range-diff detected changes: ${result.summary}`)
+    // Continue to diff comparison for final determination
+    return 'stale'
+  }
+
+  core.info(`Range-diff shows no changes: ${result.summary}`)
+  return 'not_stale'
 }
 
 async function genReviewedDiff(
