@@ -50,22 +50,28 @@ jobs:
       pull-requests: write
 
     steps:
+      # Checkout with full history for git range-diff
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - id: check
         uses: ./
         with:
           mode: check-for-approvals
-      # Try to restore the approved diff from the cache.
-      # Notably, the cached diff is the only way to reliably know the reviewed diff in
+      # Try to restore the approved diff and metadata from the cache.
+      # Notably, the cached data is the only way to reliably know the reviewed diff in
       # the case of the target branch changing because that branch was merged and
       # deleted.
       - uses: actions/cache/restore@v3
         if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
-          path: approved.diff
-          key: ${{ steps.check.outputs.approved_sha }}
+          path: |
+            approval-metadata.json
+            approved.diff
+          key: approval-${{ steps.check.outputs.approved_sha }}
       - uses: ./
         if: ${{ steps.check.outputs.approved_sha && steps.check.outputs.approved_sha != '' }}
         with:
           mode: dismiss-stale-reviews
+          # path_to_cached_metadata: approval-metadata.json  # TODO: enable when action supports it
           path_to_cached_diff: approved.diff

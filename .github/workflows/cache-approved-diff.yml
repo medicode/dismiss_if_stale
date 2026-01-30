@@ -20,16 +20,45 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      # get the diff using gh CLI
-      - run: >
+      # Get the merge base for range-diff comparison
+      - name: Get merge base
+        id: merge-base
+        run: |
+          MERGE_BASE=$(gh api \
+            /repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
+            --jq '.merge_base_commit.sha')
+          echo "sha=$MERGE_BASE" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create metadata JSON for range-diff comparison
+      - name: Create approval metadata
+        run: |
+          cat > approval-metadata.json << EOF
+          {
+            "version": 1,
+            "approved_sha": "${{ github.event.review.commit_id }}",
+            "merge_base_sha": "${{ steps.merge-base.outputs.sha }}",
+            "base_sha": "${{ github.event.pull_request.base.sha }}",
+            "base_ref": "${{ github.event.pull_request.base.ref }}",
+            "approved_at": "${{ github.event.review.submitted_at }}"
+          }
+          EOF
+
+      # Get the diff using gh CLI (for fallback comparison)
+      - name: Get approved diff
+        run: >
           gh api -H 'Accept: application/vnd.github.diff'
           /repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} > approved.diff
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Cache the diff. The cache is scoped to the current branch and the "default"
+
+      # Cache both files together. The cache is scoped to the current branch and the "default"
       # branch aka develop.
       - uses: actions/cache/save@v3
         with:
-          path: approved.diff
+          path: |
+            approval-metadata.json
+            approved.diff
           # we key by the commit corresponding to when the PR was approved
-          key: ${{ github.event.pull_request.head.sha }}
+          key: approval-${{ github.event.pull_request.head.sha }}
