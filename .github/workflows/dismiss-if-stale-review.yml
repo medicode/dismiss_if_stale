@@ -26,6 +26,7 @@ on:  # specify when to trigger the workflow
     - master
     - develop
     - main
+    - 01-30-feat_use_git_range-diff_for_more_accurate_stale_review_detection  # temporary for testing
   # Note that the pull_request event doesn't get triggered if there are merge
   # conflicts[1].
   # This is handy for the case of a stack of PRs being rebased and the base branch
