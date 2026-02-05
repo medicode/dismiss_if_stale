@@ -175,4 +175,13 @@ export class PullRequest {
       return null
     }
   }
+
+  async getMergeBase(base: string, head: string): Promise<string> {
+    const response = await this.octokit.rest.repos.compareCommitsWithBasehead({
+      owner: this.owner,
+      repo: this.repo,
+      basehead: `${base}...${head}`,
+    })
+    return response.data.merge_base_commit.sha
+  }
 }

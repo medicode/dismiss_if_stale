@@ -11,6 +11,11 @@ inputs:
   path_to_cached_diff:
     description: >
       Path to the cached diff file. Only required for dismiss-stale-reviews mode.
+  path_to_cached_metadata:
+    description: >
+      Path to the cached approval metadata JSON file. Used for range-diff comparison
+      which is more accurate for rebased branches. If not provided or file doesn't
+      exist, falls back to diff comparison. Only relevant in dismiss-stale-reviews mode.
   token:
     description: >
       GitHub token - at a minimum, this must have
