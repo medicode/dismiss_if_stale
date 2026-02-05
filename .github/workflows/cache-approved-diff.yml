@@ -37,6 +37,7 @@ jobs:
           cat > approval-metadata.json << EOF
           {
             "version": 1,
+            "review_id": "${{ github.event.review.id }}",
             "approved_sha": "${{ github.event.review.commit_id }}",
             "merge_base_sha": "${{ steps.merge-base.outputs.sha }}",
             "base_sha": "${{ github.event.pull_request.base.sha }}",
@@ -60,5 +61,6 @@ jobs:
           path: |
             approval-metadata.json
             approved.diff
-          # we key by the commit corresponding to when the PR was approved
-          key: approval-${{ github.event.pull_request.head.sha }}
+          # Key by review ID - this is immutable even after force pushes
+          # (unlike commit SHA which GitHub updates on the review object)
+          key: approval-${{ github.event.review.id }}
