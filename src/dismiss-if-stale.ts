@@ -21,11 +21,13 @@ export async function dismissIfStale({
   path_to_cached_diff,
   path_to_cached_metadata,
   repo_path,
+  range_diff_fetch_depth,
 }: {
   token: string
   path_to_cached_diff: string
   path_to_cached_metadata: string
   repo_path: string
+  range_diff_fetch_depth: number
 }): Promise<void> {
   // Only run if the PR's branch was updated (synchronize) or the base branch
   // was changed (edited event was triggered and the changes field of the event
@@ -63,8 +65,10 @@ export async function dismissIfStale({
     path_to_cached_metadata,
     pull_request,
     repo_path,
+    token,
     current_head: pull_request_payload.head.sha,
     base_ref: pull_request_payload.base.ref,
+    range_diff_fetch_depth,
   })
 
   if (rangeDiffResult === 'not_stale') {
@@ -92,18 +96,29 @@ export async function dismissIfStale({
   }
 
   // Generate the current diff.
-  let current_diff = await pull_request.compareCommits(
-    pull_request_payload.base.sha,
-    pull_request_payload.head.sha
-  )
-  current_diff = normalizeDiff(current_diff)
-  const current_three_dot_diff_snippet = current_diff.slice(0, 5000)
-  core.debug(
-    `current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`
-  )
+  let current_diff: string | null = null
+  try {
+    current_diff = await pull_request.compareCommits(
+      pull_request_payload.base.sha,
+      pull_request_payload.head.sha
+    )
+    current_diff = normalizeDiff(current_diff)
+  } catch (error) {
+    core.warning(
+      `Unable to get current three-dot diff: ${
+        error instanceof Error ? error.message : error
+      }`
+    )
+  }
+  if (current_diff) {
+    const current_three_dot_diff_snippet = current_diff.slice(0, 5000)
+    core.debug(
+      `current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`
+    )
+  }
 
   let msg = ''
-  if (reviewed_diff && reviewed_diff !== current_diff) {
+  if (current_diff && reviewed_diff && reviewed_diff !== current_diff) {
     // Consider the case of
     //
     //   main -> branch1 -> branch2
@@ -147,14 +162,18 @@ export async function dismissIfStale({
         'Unable to compute two-dot diff (too large or failed). Pessimistically dismissing stale reviews.'
     }
   }
-  if (diffs_dir) {
+  if (diffs_dir && current_diff) {
     fs.writeFileSync(`${diffs_dir}/current.diff`, current_diff)
   }
 
   // If the diffs are different, unable to generate the current diff, or we weren't able
   // to get the reviewed diff, then the review is (pessimistically) considered stale.
   if (reviewed_diff !== current_diff) {
-    if (!reviewed_diff) {
+    if (!current_diff) {
+      msg =
+        'Unable to get the current diff. ' +
+        'Pessimistically dismissing stale reviews.'
+    } else if (!reviewed_diff) {
       msg =
         'Unable to get the most recently reviewed diff. ' +
         'Pessimistically dismissing stale reviews.'
@@ -182,14 +201,18 @@ async function tryRangeDiffCheck({
   path_to_cached_metadata,
   pull_request,
   repo_path,
+  token,
   current_head,
   base_ref,
+  range_diff_fetch_depth,
 }: {
   path_to_cached_metadata: string
   pull_request: PullRequest
   repo_path: string
+  token: string
   current_head: string
   base_ref: string
+  range_diff_fetch_depth: number
 }): Promise<RangeDiffCheckResult> {
   // Load cached metadata
   core.debug(`Checking for cached metadata at ${path_to_cached_metadata}.`)
@@ -237,6 +260,44 @@ async function tryRangeDiffCheck({
   } catch (error) {
     core.warning(
       `Failed to get current merge base: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    return 'fallback'
+  }
+
+  // Ensure repo is available and fetch the SHAs needed for range-diff.
+  // Unlike the two-dot diff fetch (which uses --depth=1), we fetch with a
+  // configurable depth because range-diff needs to walk the commit ranges.
+  const repository = github.context.payload.repository
+  if (!repository) {
+    core.debug('No repository in payload, falling back to diff comparison.')
+    return 'fallback'
+  }
+
+  try {
+    const env = ensureRepo({repo_path, token, repository})
+    const shas = [
+      metadata.merge_base_sha,
+      metadata.approved_sha,
+      currentMergeBase,
+      current_head,
+    ]
+    const depthFlag =
+      range_diff_fetch_depth > 0 ? `--depth=${range_diff_fetch_depth}` : ''
+    core.debug(
+      `Fetching SHAs for range-diff: ${shas.join(', ')}${
+        depthFlag ? ` (depth=${range_diff_fetch_depth})` : ' (unlimited depth)'
+      }`
+    )
+    execSync(`git fetch ${depthFlag} origin ${shas.join(' ')}`.trim(), {
+      env,
+      cwd: repo_path,
+      stdio: 'ignore',
+    })
+  } catch (error) {
+    core.warning(
+      `Failed to set up repo for range-diff: ${
         error instanceof Error ? error.message : String(error)
       }`
     )
@@ -299,6 +360,39 @@ function normalizeDiff(diff: string): string {
   return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '')
 }
 
+/**
+ * Ensure a git repository exists at the given path, cloning if necessary.
+ * Uses gh for authentication. Returns the env to use for subsequent git commands.
+ */
+function ensureRepo({
+  repo_path,
+  token,
+  repository,
+}: {
+  repo_path: string
+  token: string
+  repository: PayloadRepository
+}): typeof process.env {
+  const env: typeof process.env = {...process.env, GITHUB_TOKEN: token}
+  if (!fs.existsSync(repo_path)) {
+    core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
+    fs.mkdirSync(repo_path, {recursive: true})
+    execSync(
+      `gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`,
+      {
+        env,
+        stdio: 'ignore',
+      }
+    )
+    core.debug('Configuring git to use gh as a credential helper.')
+    execSync('gh auth setup-git', {
+      env,
+      cwd: repo_path,
+    })
+  }
+  return env
+}
+
 function genTwoDotDiff({
   repository,
   token,
@@ -318,33 +412,7 @@ function genTwoDotDiff({
   // 2. fetch the base and head commits
   // 3. generate the diff using git diff
 
-  // clone the repo if needed
-  let env = process.env
-  if (!fs.existsSync(repo_path)) {
-    core.debug(`Cloning ${repository.full_name} to ${repo_path}.`)
-    fs.mkdirSync(repo_path, {recursive: true})
-    // Use gh versus git clone - makes authentication via token easier.
-    // Note that the env here is propagated to subsequent git commands - this is
-    // needed for gh to use the token.
-    env = {
-      ...env,
-      GITHUB_TOKEN: token,
-    }
-    execSync(
-      `gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`,
-      {
-        env,
-        stdio: 'ignore', // drop maybe large output - it's not important
-        // all of the execSync calls below haven't had their output suppressed because
-        // it can be useful for debugging, and they shouldn't be too large
-      }
-    )
-    core.debug('Configuring git to use gh as a credential helper.')
-    execSync('gh auth setup-git', {
-      env,
-      cwd: repo_path,
-    })
-  }
+  const env = ensureRepo({repo_path, token, repository})
 
   // fetch the base and head commits
   core.debug(`Fetching ${base_sha} and ${head_sha}.`)

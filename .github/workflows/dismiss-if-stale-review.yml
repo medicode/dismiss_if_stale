@@ -50,10 +50,7 @@ jobs:
       pull-requests: write
 
     steps:
-      # Checkout with full history for git range-diff
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
       - id: check
         uses: ./
         with:

@@ -24,6 +24,13 @@ async function run(): Promise<void> {
         }),
         path_to_cached_metadata: core.getInput('path_to_cached_metadata'),
         repo_path: core.getInput('repo_path', {required: true}),
+        range_diff_fetch_depth: (() => {
+          const parsed = parseInt(core.getInput('range_diff_fetch_depth'), 10)
+          if (isNaN(parsed)) {
+            throw new Error('range_diff_fetch_depth must be a valid integer')
+          }
+          return parsed
+        })(),
       })
     }
   } catch (error) {

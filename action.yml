@@ -25,6 +25,13 @@ inputs:
     description: >
       Optional directory to store diffs - useful for debugging what changes led to
       approval dismissals. Only relevant in dismiss-stale-reviews mode.
+  range_diff_fetch_depth:
+    description: >
+      Maximum number of commits to fetch when setting up the repo for git
+      range-diff. Lower values speed up the fetch but may cause range-diff to
+      fail if the commit ranges are deeper than this limit. Set to 0 for
+      unlimited depth. Only relevant in dismiss-stale-reviews mode.
+    default: '250'
   repo_path:
     description: >
       Path to the repo for the pull request - if the repo is not already checked out to
