@@ -35,7 +35,10 @@ describe('range-diff integration', () => {
    * Helper to get the current HEAD SHA
    */
   function getHead(): string {
-    return execSync('git rev-parse HEAD', {cwd: repoPath, encoding: 'utf8'}).trim()
+    return execSync('git rev-parse HEAD', {
+      cwd: repoPath,
+      encoding: 'utf8',
+    }).trim()
   }
 
   /**
@@ -102,7 +105,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with one commit
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const featureSha = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const featureSha = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
 
     // Get merge base (should be mainSha)
     const mergeBase = getMergeBase('main', 'feature')
@@ -140,7 +147,11 @@ describe('range-diff integration', () => {
 
     // Go back to main and add a commit
     execSync('git checkout main', {cwd: repoPath, stdio: 'ignore'})
-    commitFile({filename: 'other.ts', content: 'export const y = 2;\n', message: 'Add other file'})
+    commitFile({
+      filename: 'other.ts',
+      content: 'export const y = 2;\n',
+      message: 'Add other file',
+    })
 
     // Rebase feature onto main
     execSync('git checkout feature', {cwd: repoPath, stdio: 'ignore'})
@@ -174,7 +185,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with one commit
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const originalSha = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const originalSha = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const mergeBase = getMergeBase('main', 'feature')
 
     // Amend the commit message only
@@ -215,7 +230,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with one commit
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const originalSha = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const originalSha = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const mergeBase = getMergeBase('main', 'feature')
 
     // Create a backup branch to preserve the original commit
@@ -254,7 +273,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with one commit
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const firstCommit = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const firstCommit = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const mergeBase = getMergeBase('main', 'feature')
 
     // Store the "approved" state
@@ -289,7 +312,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with two commits
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const firstCommit = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const firstCommit = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const secondCommit = commitFile({
       filename: 'feature2.ts',
       content: 'export const y = 2;\n',
@@ -327,7 +354,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with two commits
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const secondCommit = commitFile({
       filename: 'feature.ts',
       content: 'export const x = 1;\nexport const y = 2;\n',
@@ -354,7 +385,9 @@ describe('range-diff integration', () => {
 
     expect(result.status).toBe('unknown')
     // Could have added/removed markers depending on how git matches them
-    expect(['added', 'removed'].some(s => result.summary.includes(s))).toBe(true)
+    expect(['added', 'removed'].some(s => result.summary.includes(s))).toBe(
+      true
+    )
   })
 
   test('commit reordered → depends on git matching', () => {
@@ -367,8 +400,16 @@ describe('range-diff integration', () => {
 
     // Create feature branch with two commits
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const commitB = commitFile({filename: 'b.ts', content: 'export const b = 1;\n', message: 'Add B'})
-    const commitC = commitFile({filename: 'c.ts', content: 'export const c = 1;\n', message: 'Add C'})
+    const commitB = commitFile({
+      filename: 'b.ts',
+      content: 'export const b = 1;\n',
+      message: 'Add B',
+    })
+    const commitC = commitFile({
+      filename: 'c.ts',
+      content: 'export const c = 1;\n',
+      message: 'Add C',
+    })
     const mergeBase = getMergeBase('main', 'feature')
     const approvedSha = commitC
 
@@ -403,9 +444,21 @@ describe('range-diff integration', () => {
 
     // Create feature branch with multiple commits
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    commitFile({filename: 'b.ts', content: 'export const b = 1;\n', message: 'Add B'})
-    commitFile({filename: 'c.ts', content: 'export const c = 1;\n', message: 'Add C'})
-    const commitD = commitFile({filename: 'd.ts', content: 'export const d = 1;\n', message: 'Add D'})
+    commitFile({
+      filename: 'b.ts',
+      content: 'export const b = 1;\n',
+      message: 'Add B',
+    })
+    commitFile({
+      filename: 'c.ts',
+      content: 'export const c = 1;\n',
+      message: 'Add C',
+    })
+    const commitD = commitFile({
+      filename: 'd.ts',
+      content: 'export const d = 1;\n',
+      message: 'Add D',
+    })
     const mergeBase = getMergeBase('main', 'feature')
     const approvedSha = commitD
 
@@ -450,7 +503,11 @@ describe('range-diff integration', () => {
 
     // Create feature branch with one commit (the approved state)
     execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
-    const originalSha = commitFile({filename: 'feature.ts', content: 'export const x = 1;\n', message: 'Add feature'})
+    const originalSha = commitFile({
+      filename: 'feature.ts',
+      content: 'export const x = 1;\n',
+      message: 'Add feature',
+    })
     const mergeBase = getMergeBase('main', 'feature')
 
     // Preserve the approved state on a backup branch
@@ -484,14 +541,14 @@ describe('range-diff integration', () => {
     // But the net diff IS the same — this is why we fall back to diff comparison
     // instead of dismissing based on range-diff 'stale' alone.
     // Verify the net content matches the approved state:
-    const approvedContent = execSync(
-      `git show feature-approved:feature.ts`,
-      {cwd: repoPath, encoding: 'utf8'}
-    )
-    const currentContent = execSync(
-      `git show feature:feature.ts`,
-      {cwd: repoPath, encoding: 'utf8'}
-    )
+    const approvedContent = execSync(`git show feature-approved:feature.ts`, {
+      cwd: repoPath,
+      encoding: 'utf8',
+    })
+    const currentContent = execSync(`git show feature:feature.ts`, {
+      cwd: repoPath,
+      encoding: 'utf8',
+    })
     expect(currentContent).toBe(approvedContent)
   })
 

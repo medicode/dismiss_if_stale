@@ -94,7 +94,7 @@ const pull_request_1 = __nccwpck_require__(1843);
 const child_process_1 = __nccwpck_require__(2081);
 const range_diff_1 = __nccwpck_require__(9776);
 // assumes that there exists at least one approval to dismiss
-function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, repo_path, }) {
+function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, repo_path, range_diff_fetch_depth, }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Only run if the PR's branch was updated (synchronize) or the base branch
         // was changed (edited event was triggered and the changes field of the event
@@ -126,8 +126,10 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
             path_to_cached_metadata,
             pull_request,
             repo_path,
+            token,
             current_head: pull_request_payload.head.sha,
             base_ref: pull_request_payload.base.ref,
+            range_diff_fetch_depth,
         });
         if (rangeDiffResult === 'not_stale') {
             core.notice('Range-diff shows no changes to commits since approval. Review is not stale.');
@@ -147,12 +149,20 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
             }
         }
         // Generate the current diff.
-        let current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
-        current_diff = normalizeDiff(current_diff);
-        const current_three_dot_diff_snippet = current_diff.slice(0, 5000);
-        core.debug(`current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`);
+        let current_diff = null;
+        try {
+            current_diff = yield pull_request.compareCommits(pull_request_payload.base.sha, pull_request_payload.head.sha);
+            current_diff = normalizeDiff(current_diff);
+        }
+        catch (error) {
+            core.warning(`Unable to get current three-dot diff: ${error instanceof Error ? error.message : error}`);
+        }
+        if (current_diff) {
+            const current_three_dot_diff_snippet = current_diff.slice(0, 5000);
+            core.debug(`current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`);
+        }
         let msg = '';
-        if (reviewed_diff && reviewed_diff !== current_diff) {
+        if (current_diff && reviewed_diff && reviewed_diff !== current_diff) {
             // Consider the case of
             //
             //   main -> branch1 -> branch2
@@ -193,13 +203,18 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
                     'Unable to compute two-dot diff (too large or failed). Pessimistically dismissing stale reviews.';
             }
         }
-        if (diffs_dir) {
+        if (diffs_dir && current_diff) {
             fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
         }
         // If the diffs are different, unable to generate the current diff, or we weren't able
         // to get the reviewed diff, then the review is (pessimistically) considered stale.
         if (reviewed_diff !== current_diff) {
-            if (!reviewed_diff) {
+            if (!current_diff) {
+                msg =
+                    'Unable to get the current diff. ' +
+                        'Pessimistically dismissing stale reviews.';
+            }
+            else if (!reviewed_diff) {
                 msg =
                     'Unable to get the most recently reviewed diff. ' +
                         'Pessimistically dismissing stale reviews.';
@@ -223,7 +238,7 @@ exports.dismissIfStale = dismissIfStale;
  * @returns 'not_stale' if range-diff confirms no changes,
  *          'fallback' if range-diff detected changes or couldn't be run
  */
-function tryRangeDiffCheck({ path_to_cached_metadata, pull_request, repo_path, current_head, base_ref, }) {
+function tryRangeDiffCheck({ path_to_cached_metadata, pull_request, repo_path, token, current_head, base_ref, range_diff_fetch_depth, }) {
     return __awaiter(this, void 0, void 0, function* () {
         // Load cached metadata
         core.debug(`Checking for cached metadata at ${path_to_cached_metadata}.`);
@@ -260,6 +275,34 @@ function tryRangeDiffCheck({ path_to_cached_metadata, pull_request, repo_path, c
         }
         catch (error) {
             core.warning(`Failed to get current merge base: ${error instanceof Error ? error.message : String(error)}`);
+            return 'fallback';
+        }
+        // Ensure repo is available and fetch the SHAs needed for range-diff.
+        // Unlike the two-dot diff fetch (which uses --depth=1), we fetch with a
+        // configurable depth because range-diff needs to walk the commit ranges.
+        const repository = github.context.payload.repository;
+        if (!repository) {
+            core.debug('No repository in payload, falling back to diff comparison.');
+            return 'fallback';
+        }
+        try {
+            const env = ensureRepo({ repo_path, token, repository });
+            const shas = [
+                metadata.merge_base_sha,
+                metadata.approved_sha,
+                currentMergeBase,
+                current_head,
+            ];
+            const depthFlag = range_diff_fetch_depth > 0 ? `--depth=${range_diff_fetch_depth}` : '';
+            core.debug(`Fetching SHAs for range-diff: ${shas.join(', ')}${depthFlag ? ` (depth=${range_diff_fetch_depth})` : ' (unlimited depth)'}`);
+            (0, child_process_1.execSync)(`git fetch ${depthFlag} origin ${shas.join(' ')}`.trim(), {
+                env,
+                cwd: repo_path,
+                stdio: 'ignore',
+            });
+        }
+        catch (error) {
+            core.warning(`Failed to set up repo for range-diff: ${error instanceof Error ? error.message : String(error)}`);
             return 'fallback';
         }
         // Run git range-diff
@@ -310,26 +353,18 @@ function normalizeDiff(diff) {
     //     Note that these lines may be terminated by an optional " <mode>" suffix.
     return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, '');
 }
-function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
-    // GitHub API doesn't support generating two-dot diffs (diffs between files in two
-    // commits), so we do it ourselves by
-    // 1. clone the repo if needed
-    // 2. fetch the base and head commits
-    // 3. generate the diff using git diff
-    // clone the repo if needed
-    let env = process.env;
+/**
+ * Ensure a git repository exists at the given path, cloning if necessary.
+ * Uses gh for authentication. Returns the env to use for subsequent git commands.
+ */
+function ensureRepo({ repo_path, token, repository, }) {
+    const env = Object.assign(Object.assign({}, process.env), { GITHUB_TOKEN: token });
     if (!fs_1.default.existsSync(repo_path)) {
         core.debug(`Cloning ${repository.full_name} to ${repo_path}.`);
         fs_1.default.mkdirSync(repo_path, { recursive: true });
-        // Use gh versus git clone - makes authentication via token easier.
-        // Note that the env here is propagated to subsequent git commands - this is
-        // needed for gh to use the token.
-        env = Object.assign(Object.assign({}, env), { GITHUB_TOKEN: token });
         (0, child_process_1.execSync)(`gh repo clone ${repository.full_name} ${repo_path} -- --depth=1`, {
             env,
-            stdio: 'ignore', // drop maybe large output - it's not important
-            // all of the execSync calls below haven't had their output suppressed because
-            // it can be useful for debugging, and they shouldn't be too large
+            stdio: 'ignore',
         });
         core.debug('Configuring git to use gh as a credential helper.');
         (0, child_process_1.execSync)('gh auth setup-git', {
@@ -337,6 +372,15 @@ function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
             cwd: repo_path,
         });
     }
+    return env;
+}
+function genTwoDotDiff({ repository, token, repo_path, base_sha, head_sha, }) {
+    // GitHub API doesn't support generating two-dot diffs (diffs between files in two
+    // commits), so we do it ourselves by
+    // 1. clone the repo if needed
+    // 2. fetch the base and head commits
+    // 3. generate the diff using git diff
+    const env = ensureRepo({ repo_path, token, repository });
     // fetch the base and head commits
     core.debug(`Fetching ${base_sha} and ${head_sha}.`);
     (0, child_process_1.execSync)(`git fetch --depth=1 origin ${base_sha} ${head_sha}`, {
@@ -454,6 +498,13 @@ function run() {
                     }),
                     path_to_cached_metadata: core.getInput('path_to_cached_metadata'),
                     repo_path: core.getInput('repo_path', { required: true }),
+                    range_diff_fetch_depth: (() => {
+                        const parsed = parseInt(core.getInput('range_diff_fetch_depth'), 10);
+                        if (isNaN(parsed)) {
+                            throw new Error('range_diff_fetch_depth must be a valid integer');
+                        }
+                        return parsed;
+                    })(),
                 });
             }
         }
