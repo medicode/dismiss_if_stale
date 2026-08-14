@@ -127,6 +127,36 @@ describe('range-diff integration', () => {
     expect(result.summary).toContain('no code changes')
   })
 
+  test('new commit after a 12-commit approval → unknown', () => {
+    const mergeBase = getHead()
+
+    execSync('git checkout -b feature', {cwd: repoPath, stdio: 'ignore'})
+    for (let i = 1; i <= 12; i++) {
+      commitFile({
+        filename: `feature-${i}.ts`,
+        content: `export const value${i} = ${i};\n`,
+        message: `Add feature ${i}`,
+      })
+    }
+    const approvedSha = getHead()
+
+    const currentHead = commitFile({
+      filename: 'post-approval.ts',
+      content: 'export const changedAfterApproval = true;\n',
+      message: 'Change code after approval',
+    })
+
+    const result = runAndParse({
+      prevMergeBase: mergeBase,
+      approvedSha,
+      currMergeBase: mergeBase,
+      currentHead,
+    })
+
+    expect(result.status).toBe('unknown')
+    expect(result.summary).toContain('1 added')
+  })
+
   test('rebase onto updated main (no code changes) → not_stale', () => {
     // Setup:
     // main: A -> C (new commit on main)

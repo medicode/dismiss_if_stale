@@ -18,6 +18,17 @@ export interface RangeDiffResult {
   summary: string
 }
 
+const RANGE_DIFF_MARKER_PATTERN =
+  /^\s*-?(\d+)?:\s+[0-9a-f-]+\s+([=!<>])\s+-?(\d+)?:/
+
+function matchRangeDiffMarker(line: string): RegExpMatchArray | null {
+  return line.match(RANGE_DIFF_MARKER_PATTERN)
+}
+
+function isRangeDiffDetailLine(line: string): boolean {
+  return line === '' || line.startsWith('    ') || line.startsWith('\t')
+}
+
 /**
  * Parse git range-diff output to determine if reviews are stale.
  *
@@ -47,6 +58,7 @@ export function parseRangeDiffOutput(output: string): RangeDiffResult {
   let codeModifiedCount = 0
   let addedCount = 0
   let removedCount = 0
+  let hasUnexpectedTopLevelLine = false
 
   let i = 0
   while (i < lines.length) {
@@ -58,18 +70,14 @@ export function parseRangeDiffOutput(output: string): RangeDiffResult {
       continue
     }
 
-    // Skip indented lines (diff details) - these are handled when processing ! markers
-    if (line.startsWith(' ') || line.startsWith('\t')) {
-      i++
-      continue
-    }
-
     // Match the range-diff output format
     // Format: "N: <sha> <marker> N: <sha> <subject>" or "-: ------- <marker> ..."
     // The marker is one of: =, !, <, >
-    const markerMatch = line.match(
-      /^\s*-?(\d+)?:\s+[0-9a-f-]+\s+([=!<>])\s+-?(\d+)?:/
-    )
+    //
+    // Try this before treating an indented line as diff detail. Git right-aligns
+    // commit indices, so marker lines can start with padding when a range contains
+    // ten or more commits.
+    const markerMatch = matchRangeDiffMarker(line)
 
     if (markerMatch) {
       const marker = markerMatch[2]
@@ -86,12 +94,13 @@ export function parseRangeDiffOutput(output: string): RangeDiffResult {
           } else {
             metadataOnlyCount++
           }
-          // Skip past the indented diff lines
+          // Skip details up to the next marker line. The next marker may itself be
+          // indented for column alignment. Stop on unexpected top-level content so
+          // the main loop can mark the output as only partially parsed.
           while (
             i < lines.length &&
-            (lines[i] === '' ||
-              lines[i].startsWith(' ') ||
-              lines[i].startsWith('\t'))
+            !matchRangeDiffMarker(lines[i]) &&
+            isRangeDiffDetailLine(lines[i])
           ) {
             i++
           }
@@ -108,7 +117,26 @@ export function parseRangeDiffOutput(output: string): RangeDiffResult {
           i++
       }
     } else {
+      if (!isRangeDiffDetailLine(line)) {
+        hasUnexpectedTopLevelLine = true
+      }
       i++
+    }
+  }
+
+  const recognizedCount =
+    identicalCount +
+    metadataOnlyCount +
+    codeModifiedCount +
+    addedCount +
+    removedCount
+
+  // A non-empty range-diff that is wholly or partially unrecognized is not proof
+  // that the ranges are equivalent. Fall back to the full diff comparison.
+  if (recognizedCount === 0 || hasUnexpectedTopLevelLine) {
+    return {
+      status: 'unknown',
+      summary: 'Unable to parse range-diff output; checking diff',
     }
   }
 
@@ -169,8 +197,9 @@ function hasCodeChangesInModifiedCommit(
   for (let i = startIndex; i < lines.length; i++) {
     const line = lines[i]
 
-    // Stop at non-indented lines (next commit marker or end)
-    if (line && !line.startsWith(' ') && !line.startsWith('\t')) {
+    // Stop at the next commit marker, including markers indented by Git for
+    // column alignment, or at any unexpected top-level line.
+    if (matchRangeDiffMarker(line) || !isRangeDiffDetailLine(line)) {
       break
     }
 
