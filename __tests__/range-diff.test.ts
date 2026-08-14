@@ -70,6 +70,18 @@ describe('parseRangeDiffOutput', () => {
     expect(result.summary).toContain('1 added')
   })
 
+  test('space-padded added commits in a 10+ commit range → unknown', () => {
+    const output = ` 9:  e07464b7 =  9:  e07464b7 Ninth commit
+10:  a0769915 = 10:  a0769915 Tenth commit
+11:  32848281 = 11:  32848281 Eleventh commit
+12:  67a04d70 = 12:  67a04d70 Approved commit
+ -:  -------- > 13:  9a728394 First post-approval change
+ -:  -------- > 14:  20eeaf37 Second post-approval change`
+    const result = parseRangeDiffOutput(output)
+    expect(result.status).toBe('unknown')
+    expect(result.summary).toContain('2 added')
+  })
+
   test('removed commit (<) → unknown (needs fallback)', () => {
     const output = '1:  abc1234 < -:  ------- Removed commit'
     const result = parseRangeDiffOutput(output)
@@ -155,6 +167,45 @@ describe('parseRangeDiffOutput', () => {
     expect(result.status).toBe('not_stale')
     expect(result.summary).toContain('2 commit')
     expect(result.summary).toContain('no code changes')
+  })
+
+  test('space-padded marker after modified commit details is processed', () => {
+    const output = `10:  aaa1111 ! 10:  bbb1111 Changed message only
+    @@ Commit message
+     -old msg
+     +new msg
+ -:  -------- > 11:  ccc2222 Added commit`
+    const result = parseRangeDiffOutput(output)
+    expect(result.status).toBe('unknown')
+    expect(result.summary).toContain('1 added')
+  })
+
+  test('non-empty unrecognized output → unknown', () => {
+    expect(parseRangeDiffOutput('unexpected range-diff output')).toEqual({
+      status: 'unknown',
+      summary: 'Unable to parse range-diff output; checking diff',
+    })
+  })
+
+  test('recognized marker plus unrecognized top-level line → unknown', () => {
+    const output = `1:  abc1234 = 1:  def5678 Recognized commit
+ ?:  -------- ? 2:  123abcd Unrecognized marker format`
+    expect(parseRangeDiffOutput(output)).toEqual({
+      status: 'unknown',
+      summary: 'Unable to parse range-diff output; checking diff',
+    })
+  })
+
+  test('unrecognized top-level line after modified details → unknown', () => {
+    const output = `1:  abc1234 ! 1:  def5678 Changed message only
+    @@ Commit message
+     -old msg
+     +new msg
+unrecognized marker format`
+    expect(parseRangeDiffOutput(output)).toEqual({
+      status: 'unknown',
+      summary: 'Unable to parse range-diff output; checking diff',
+    })
   })
 
   test('handles real git range-diff output with code changes', () => {
