@@ -45,7 +45,11 @@ The action operates in two modes controlled by the `mode` input parameter:
 
 ## Testing Locally
 
-The action uses `@actions/core` and `@actions/github` which expect GitHub Actions environment variables. Tests are minimal (placeholder only). To test changes, the recommended approach is to use the action in a real workflow.
+`npm test` runs the Jest suites in `__tests__/`:
+- `range-diff.test.ts`: unit tests for parsing `git range-diff` output
+- `range-diff-integration.test.ts`: builds real temporary git repos to exercise `runRangeDiff` end to end
+
+The GitHub API paths (`@actions/core` / `@actions/github`) expect GitHub Actions environment variables and aren't covered by tests; to test those, use the action in a real workflow.
 
 ## Workflow Integration
 
