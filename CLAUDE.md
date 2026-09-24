@@ -32,11 +32,13 @@ The action operates in two modes controlled by the `mode` input parameter:
 - **src/check-for-approvals.ts**: Retrieves approval status, commit SHA, and review ID
 - **src/dismiss-if-stale.ts**: Core logic for diff comparison and stale detection. Handles both three-dot and two-dot diffs, and supports cached diffs for when base branches are deleted
 - **src/pull-request.ts**: GitHub API wrapper for fetching reviews, events, and comparing commits
+- **src/range-diff.ts**: Runs `git range-diff` between the approved and current commit ranges and parses its output to decide whether the change is only a rebase
 
 ### Key Concepts
 
 - **Three-dot diff**: GitHub's default comparison showing changes between branches (what GitHub UI shows)
 - **Two-dot diff**: Direct commit-to-commit comparison, generated via git when needed
+- **Range-diff comparison**: When cached approval metadata (merge base + approved head) is available, compares commit ranges with `git range-diff`, which tells a pure rebase apart from real code changes. Falls back to diff comparison otherwise
 - **Diff normalization**: Removes metadata (timestamps, line numbers) to compare only actual code changes
 - **Cached diffs**: Workflow can cache the approved diff to handle branch deletion scenarios
 - **Review ID cache key**: Cache is keyed by review ID (not commit SHA) because GitHub updates the review's `commit_id` field after force pushes, but review IDs are immutable
