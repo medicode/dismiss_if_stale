@@ -47,6 +47,14 @@ with:
 
 See [cache-approved-diff.yml](.github/workflows/cache-approved-diff.yml) and [dismiss-if-stale-review.yml](.github/workflows/dismiss-if-stale-review.yml) for the full `dismiss-stale-reviews` setup.
 
-## Usage:
+## Usage
 
-After testing you can [create a v1 tag](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md) to reference the stable and latest V1 action
+Reference the action from a workflow in the target repo:
+
+```yaml
+uses: medicode/dismiss_if_stale@main
+with:
+  mode: check-for-approvals  # or dismiss-stale-reviews
+```
+
+See [action.yml](action.yml) for all inputs and outputs.
