@@ -11,9 +11,9 @@ on:
       - main
     paths-ignore:
       - '**.md'
+  # Runs on every PR (no paths-ignore) because check-dist is a required status check:
+  # a path-filtered skip leaves it pending forever and blocks docs-only PRs from merging.
   pull_request:
-    paths-ignore:
-      - '**.md'
   workflow_dispatch:
 
 jobs:
