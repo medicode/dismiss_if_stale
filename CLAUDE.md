@@ -52,3 +52,9 @@ The action uses `@actions/core` and `@actions/github` which expect GitHub Action
 See `.github/workflows/` for example workflows:
 - `cache-approved-diff.yml`: Caches diff and metadata when PR is approved (keyed by review ID)
 - `dismiss-if-stale-review.yml`: Runs on PR sync/edit to dismiss stale reviews (looks up cache by review ID)
+
+CI for this repo itself:
+- `test.yml`: Runs `npm run all` and exercises the action against the PR (`check-for-approvals`)
+- `check-dist.yml`: Fails if the checked-in `dist/` doesn't match a fresh build
+- `validate-action-types.yml`: Checks `action-types.yml` against `action.yml`
+- `codeql-analysis.yml`: CodeQL security scanning
