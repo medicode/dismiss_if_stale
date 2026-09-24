@@ -17,10 +17,8 @@ Run the tests :heavy_check_mark:
 ```bash
 $ npm test
 
- PASS  ./index.test.js
-  ✓ throws invalid number (3ms)
-  ✓ wait 500 ms (504ms)
-  ✓ test runs (95ms)
+ PASS  __tests__/range-diff.test.ts
+ PASS  __tests__/range-diff-integration.test.ts
 
 ...
 ```
@@ -48,10 +46,10 @@ You can now validate the action by referencing `./` in a workflow in your repo (
 ```yaml
 uses: ./
 with:
-  milliseconds: 1000
+  mode: check-for-approvals
 ```
 
-See the [actions tab](https://github.com/actions/typescript-action/actions) for runs of this action! :rocket:
+See [cache-approved-diff.yml](.github/workflows/cache-approved-diff.yml) and [dismiss-if-stale-review.yml](.github/workflows/dismiss-if-stale-review.yml) for the full `dismiss-stale-reviews` setup.
 
 ## Usage:
 
