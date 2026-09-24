@@ -13,6 +13,7 @@ npm run build      # Compile TypeScript (src/ → lib/)
 npm run package    # Bundle for distribution (lib/ → dist/index.js)
 npm run lint       # Run ESLint on src/**/*.ts
 npm run format     # Auto-format with Prettier
+npm run format-check  # Check formatting without writing (CI-friendly)
 npm test           # Run Jest tests
 npm run all        # Run build, format, lint, package, and test
 ```
