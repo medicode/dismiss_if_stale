@@ -1,3 +1,4 @@
+import {expect, describe, test} from '@jest/globals'
 import {isReviewStale} from '../src/dismiss-if-stale'
 
 describe('isReviewStale', () => {
