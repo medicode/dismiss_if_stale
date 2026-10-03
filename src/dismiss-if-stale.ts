@@ -15,6 +15,17 @@ import {
   runRangeDiff,
 } from './range-diff'
 
+export function isReviewStale(
+  reviewedDiff: string | null,
+  currentDiff: string | null
+): boolean {
+  return (
+    reviewedDiff === null ||
+    currentDiff === null ||
+    reviewedDiff !== currentDiff
+  )
+}
+
 // assumes that there exists at least one approval to dismiss
 export async function dismissIfStale({
   token,
@@ -84,7 +95,7 @@ export async function dismissIfStale({
   // making the net PR diff unchanged. Only full diff comparison can catch that.
 
   let reviewed_diff = await genReviewedDiff(path_to_cached_diff, pull_request)
-  if (reviewed_diff) {
+  if (reviewed_diff !== null) {
     reviewed_diff = normalizeDiff(reviewed_diff)
     const reviewed_diff_snippet = reviewed_diff.slice(0, 5000)
     core.debug(
@@ -110,7 +121,7 @@ export async function dismissIfStale({
       }`
     )
   }
-  if (current_diff) {
+  if (current_diff !== null) {
     const current_three_dot_diff_snippet = current_diff.slice(0, 5000)
     core.debug(
       `current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`
@@ -118,7 +129,11 @@ export async function dismissIfStale({
   }
 
   let msg = ''
-  if (current_diff && reviewed_diff && reviewed_diff !== current_diff) {
+  if (
+    current_diff !== null &&
+    reviewed_diff !== null &&
+    reviewed_diff !== current_diff
+  ) {
     // Consider the case of
     //
     //   main -> branch1 -> branch2
@@ -162,18 +177,18 @@ export async function dismissIfStale({
         'Unable to compute two-dot diff (too large or failed). Pessimistically dismissing stale reviews.'
     }
   }
-  if (diffs_dir && current_diff) {
+  if (diffs_dir && current_diff !== null) {
     fs.writeFileSync(`${diffs_dir}/current.diff`, current_diff)
   }
 
   // If the diffs are different, unable to generate the current diff, or we weren't able
   // to get the reviewed diff, then the review is (pessimistically) considered stale.
-  if (reviewed_diff !== current_diff) {
-    if (!current_diff) {
+  if (isReviewStale(reviewed_diff, current_diff)) {
+    if (current_diff === null) {
       msg =
         'Unable to get the current diff. ' +
         'Pessimistically dismissing stale reviews.'
-    } else if (!reviewed_diff) {
+    } else if (reviewed_diff === null) {
       msg =
         'Unable to get the most recently reviewed diff. ' +
         'Pessimistically dismissing stale reviews.'
