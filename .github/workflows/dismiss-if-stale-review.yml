@@ -26,6 +26,7 @@ on:  # specify when to trigger the workflow
     - master
     - develop
     - main
+  merge_group:
   # Note that the pull_request event doesn't get triggered if there are merge
   # conflicts[1].
   # This is handy for the case of a stack of PRs being rebased and the base branch
@@ -51,8 +52,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request' }}
       - id: check
         uses: ./
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           mode: check-for-approvals
       # Try to restore the approved diff and metadata from the cache.
@@ -60,15 +63,18 @@ jobs:
       # the case of the target branch changing because that branch was merged and
       # deleted.
       - uses: actions/cache/restore@v3
-        if: ${{ steps.check.outputs.review_id != '' }}
+        if: ${{ github.event_name == 'pull_request' && steps.check.outputs.review_id != '' }}
         with:
           path: |
             approval-metadata.json
             approved.diff
           key: approval-${{ steps.check.outputs.review_id }}
       - uses: ./
-        if: ${{ steps.check.outputs.review_id != '' }}
+        if: ${{ github.event_name == 'pull_request' && steps.check.outputs.review_id != '' }}
         with:
           mode: dismiss-stale-reviews
           path_to_cached_metadata: approval-metadata.json
           path_to_cached_diff: approved.diff
+      - name: Pass merge group check
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "Pull request review checks are evaluated on the individual pull request."
