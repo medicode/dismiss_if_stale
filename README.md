@@ -1,52 +1,60 @@
+# Dismiss reviews if stale
 
-## Development
+This GitHub Action compares the reviewed code with the current pull request. It
+keeps approvals when a rebase or force push leaves the code unchanged, and
+dismisses them when the code changes or the action can't compare it.
 
-> First, you'll need to have `node` v16.
+## Configure the workflows
 
-Install the dependencies
+Use the included workflows together:
+
+1. [cache-approved-diff.yml](.github/workflows/cache-approved-diff.yml) saves the
+   approved diff and commit metadata when a reviewer approves a pull request.
+2. [dismiss-if-stale-review.yml](.github/workflows/dismiss-if-stale-review.yml)
+   runs when a pull request opens, updates, or changes its base branch. The action
+   checks for stale approvals after branch updates or base changes.
+
+The action has two modes:
+
+- `check-for-approvals` returns the latest approved commit SHA in `approved_sha`
+  and its review ID in `review_id`. Both outputs are empty when the pull request
+  has no approval.
+- `dismiss-stale-reviews` compares the approved diff with the current pull
+  request diff. Run this mode only when `review_id` is non-empty.
+
+The included cache workflow needs `contents: read` and `pull-requests: read`. The
+dismissal workflow needs `contents: read` and `pull-requests: write`. The action's
+`token` input defaults to `github.token`. See [action.yml](action.yml) for all
+inputs and outputs.
+
+The example workflows use `./` because they run from this repository. In another
+repository, set `uses` to a released `owner/repository@ref` instead.
+
+## Develop
+
+Install dependencies:
+
 ```bash
-$ npm install
+npm ci
 ```
 
-Build the typescript and package it for distribution
+Build and package the action:
+
 ```bash
-$ npm run build && npm run package
+npm run build && npm run package
 ```
 
-Run the tests :heavy_check_mark:
+After changing files in `src/`, commit the rebuilt `dist/` with your changes.
+The `check-dist` workflow verifies that the bundle matches the source.
+
+Run the tests:
+
 ```bash
-$ npm test
-
- PASS  __tests__/range-diff.test.ts
- PASS  __tests__/range-diff-integration.test.ts
-
-...
+npm test
 ```
 
-## Publishing
+## Release
 
-Actions run straight from the repo, so the bundled `dist/` is checked in. After
-changing anything in `src/`, rebuild it with [ncc](https://github.com/vercel/ncc)
-and commit the result with your change:
-```bash
-$ npm run build && npm run package
-$ git add dist
-```
-
-The `check-dist` workflow fails any PR whose `dist/` doesn't match a fresh build.
-
-## Validate
-
-You can now validate the action by referencing `./` in a workflow in your repo (see [test.yml](.github/workflows/test.yml))
-
-```yaml
-uses: ./
-with:
-  mode: check-for-approvals
-```
-
-See [cache-approved-diff.yml](.github/workflows/cache-approved-diff.yml) and [dismiss-if-stale-review.yml](.github/workflows/dismiss-if-stale-review.yml) for the full `dismiss-stale-reviews` setup.
-
-## Usage:
-
-After testing you can [create a v1 tag](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md) to reference the stable and latest V1 action
+After testing, follow the [GitHub Actions versioning
+guide](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
+to create a stable tag for workflows to use.
