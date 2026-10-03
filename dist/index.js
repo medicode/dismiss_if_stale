@@ -86,13 +86,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.dismissIfStale = void 0;
+exports.dismissIfStale = exports.isReviewStale = void 0;
 const fs_1 = __importDefault(__nccwpck_require__(7147));
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const pull_request_1 = __nccwpck_require__(1843);
 const child_process_1 = __nccwpck_require__(2081);
 const range_diff_1 = __nccwpck_require__(9776);
+function isReviewStale(reviewedDiff, currentDiff) {
+    return (reviewedDiff === null ||
+        currentDiff === null ||
+        reviewedDiff !== currentDiff);
+}
+exports.isReviewStale = isReviewStale;
 // assumes that there exists at least one approval to dismiss
 function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, repo_path, range_diff_fetch_depth, }) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -140,7 +146,7 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
         // a commit could introduce a code change that a later commit reverts,
         // making the net PR diff unchanged. Only full diff comparison can catch that.
         let reviewed_diff = yield genReviewedDiff(path_to_cached_diff, pull_request);
-        if (reviewed_diff) {
+        if (reviewed_diff !== null) {
             reviewed_diff = normalizeDiff(reviewed_diff);
             const reviewed_diff_snippet = reviewed_diff.slice(0, 5000);
             core.debug(`reviewed_diff (first 5000 characters):\n${reviewed_diff_snippet}`);
@@ -157,12 +163,14 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
         catch (error) {
             core.warning(`Unable to get current three-dot diff: ${error instanceof Error ? error.message : error}`);
         }
-        if (current_diff) {
+        if (current_diff !== null) {
             const current_three_dot_diff_snippet = current_diff.slice(0, 5000);
             core.debug(`current three dot diff (first 5000 characters):\n${current_three_dot_diff_snippet}`);
         }
         let msg = '';
-        if (current_diff && reviewed_diff && reviewed_diff !== current_diff) {
+        if (current_diff !== null &&
+            reviewed_diff !== null &&
+            reviewed_diff !== current_diff) {
             // Consider the case of
             //
             //   main -> branch1 -> branch2
@@ -203,18 +211,18 @@ function dismissIfStale({ token, path_to_cached_diff, path_to_cached_metadata, r
                     'Unable to compute two-dot diff (too large or failed). Pessimistically dismissing stale reviews.';
             }
         }
-        if (diffs_dir && current_diff) {
+        if (diffs_dir && current_diff !== null) {
             fs_1.default.writeFileSync(`${diffs_dir}/current.diff`, current_diff);
         }
         // If the diffs are different, unable to generate the current diff, or we weren't able
         // to get the reviewed diff, then the review is (pessimistically) considered stale.
-        if (reviewed_diff !== current_diff) {
-            if (!current_diff) {
+        if (isReviewStale(reviewed_diff, current_diff)) {
+            if (current_diff === null) {
                 msg =
                     'Unable to get the current diff. ' +
                         'Pessimistically dismissing stale reviews.';
             }
-            else if (!reviewed_diff) {
+            else if (reviewed_diff === null) {
                 msg =
                     'Unable to get the most recently reviewed diff. ' +
                         'Pessimistically dismissing stale reviews.';
