@@ -1,6 +1,7 @@
 name: 'build-test'
 on: # rebuild any PRs and main branch changes
   pull_request:
+  merge_group:
   push:
     branches:
       - main
@@ -17,9 +18,13 @@ jobs:
           npm run all
   test: # make sure the action works on a clean machine without building
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
     steps:
       - uses: actions/checkout@v3
       - uses: ./
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           mode: check-for-approvals
+      - name: Pass merge group check
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "This integration check requires an individual pull request."
