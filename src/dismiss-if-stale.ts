@@ -184,7 +184,11 @@ export async function dismissIfStale({
   // If the diffs are different, unable to generate the current diff, or we weren't able
   // to get the reviewed diff, then the review is (pessimistically) considered stale.
   if (isReviewStale(reviewed_diff, current_diff)) {
-    if (current_diff === null) {
+    if (reviewed_diff === null && current_diff === null) {
+      msg =
+        'Unable to get both the reviewed and current diffs. ' +
+        'Pessimistically dismissing stale reviews.'
+    } else if (current_diff === null) {
       msg =
         'Unable to get the current diff. ' +
         'Pessimistically dismissing stale reviews.'
